@@ -930,6 +930,70 @@ function openForm(id){
   }
   renderThumbs();
 
+  async function fetchViaProxy(proxyUrl){
+    const res = await fetch(proxyUrl);
+    if(!res.ok) throw new Error('kod ' + res.status);
+    return await res.text();
+  }
+
+  async function fetchLinkPreview(url){
+    const proxies = [
+      'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
+      'https://corsproxy.io/?url=' + encodeURIComponent(url)
+    ];
+    let html = null;
+    let lastErr = null;
+    for(const p of proxies){
+      try{ html = await fetchViaProxy(p); if(html && html.length > 50) break; }
+      catch(e){ lastErr = e; }
+    }
+    if(!html) throw (lastErr || new Error('Ingen av mellanhands-tjänsterna svarade'));
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const getMeta = (prop) => {
+      const el = doc.querySelector(`meta[property="${prop}"]`) || doc.querySelector(`meta[name="${prop}"]`);
+      return el ? el.getAttribute('content') : null;
+    };
+    let title = getMeta('og:title') || (doc.querySelector('title') ? doc.querySelector('title').textContent : null);
+    let image = getMeta('og:image');
+    if(image){
+      try{ image = new URL(image, url).href; }catch(e){ /* leave as-is */ }
+    }
+    return { title: title ? title.trim() : null, image };
+  }
+
+  document.getElementById('fetchLinkBtn').onclick = async () => {
+    const linkInput = document.getElementById('fLink');
+    const status = document.getElementById('linkFetchStatus');
+    const fetchBtn = document.getElementById('fetchLinkBtn');
+    let url = linkInput.value.trim();
+    status.style.display = ''; status.style.color = '#8C8262';
+    if(!url){ status.textContent = 'Klistra in en länk först.'; return; }
+    if(!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    linkInput.value = url;
+    fetchBtn.disabled = true; fetchBtn.textContent = 'Hämtar…';
+    status.textContent = 'Hämtar information från länken…';
+    try{
+      const info = await fetchLinkPreview(url);
+      const nameInput = document.getElementById('fName');
+      if(info.title && !nameInput.value.trim()) nameInput.value = info.title;
+      if(info.image && !imageList.includes(info.image)){
+        imageList.push(info.image);
+        renderThumbs();
+      }
+      if(!info.title && !info.image){
+        status.textContent = 'Hittade varken titel eller bild på sidan – fyll i manuellt.';
+        status.style.color = '#A8432B';
+      }else{
+        status.textContent = 'Klart! Fyllde i det jag hittade — ändra gärna själv.';
+        status.style.color = '#4B6B4E';
+      }
+    }catch(e){
+      status.textContent = 'Kunde inte hämta sidan automatiskt (' + (e.message || 'okänt fel') + '). Fyll i manuellt.';
+      status.style.color = '#A8432B';
+    }
+    fetchBtn.disabled = false; fetchBtn.textContent = 'Hämta info';
+  };
+
   function resizeToDataUrl(file){
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
