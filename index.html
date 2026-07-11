@@ -854,7 +854,11 @@ function openForm(id){
         </div>
         <div class="field">
           <label for="fLink">Länk (valfritt)</label>
-          <input type="url" id="fLink" value="${existing && existing.link ? escapeHtml(existing.link) : ''}" placeholder="https://…">
+          <div style="display:flex; gap:8px;">
+            <input type="url" id="fLink" value="${existing && existing.link ? escapeHtml(existing.link) : ''}" placeholder="https://…" style="flex:1;">
+            <button class="btn btn-secondary" id="fetchLinkBtn" type="button" style="white-space:nowrap;">Hämta info</button>
+          </div>
+          <div id="linkFetchStatus" style="display:none; font-size:12.5px; margin-top:6px;"></div>
         </div>
         <div class="field">
           <label for="fText">Anteckning / receptext (valfritt)</label>
