@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Receptlådan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Karla:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #1F2A22;
+    --bg-2: #263229;
+    --card: #FBF6E9;
+    --card-edge: #EDE4CC;
+    --ink: #2A2620;
+    --ink-soft: #6B6455;
+    --mustard: #D9A441;
+    --mustard-deep: #B98526;
+    --brick: #A8432B;
+    --pin: #8C8272;
+    --ring: rgba(217,164,65,0.55);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(1200px 600px at 15% -10%, var(--bg-2), transparent 60%),
+      var(--bg);
+    color: var(--card);
+    font-family: 'Karla', sans-serif;
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  ::selection{ background: var(--mustard); color:#1F2A22; }
+
+  .wrap{ max-width: 980px; margin:0 auto; padding: 28px 18px 80px; }
+
+  header.top{ display:flex; flex-direction:column; gap:4px; margin-bottom:22px; }
+  .eyebrow{
+    font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:.14em;
+    text-transform:uppercase; color: var(--mustard); opacity:.9;
+  }
+  h1{
+    font-family:'Fraunces', serif; font-weight:600; font-optical-sizing:auto;
+    font-size: clamp(32px, 6vw, 52px); margin:2px 0 4px; color:#FBF6E9;
+    letter-spacing:-0.01em;
+  }
+  .sub{ color:#C9C2AE; font-size:14.5px; max-width:52ch; line-height:1.5;}
+
+  .toolbar{
+    display:flex; flex-wrap:wrap; gap:10px; align-items:center;
+    margin: 22px 0 18px;
+  }
+  .search{
+    flex:1 1 220px; min-width:160px;
+    background:#26332A; border:1px solid #3A4438; border-radius:10px;
+    padding:11px 14px; color:#F3EFE2; font-size:14.5px; font-family:'Karla',sans-serif;
+  }
+  .search::placeholder{ color:#8E8B78; }
+  .search:focus{ outline:2px solid var(--ring); outline-offset:1px; border-color:transparent;}
+
+  .btn{
+    font-family:'Karla',sans-serif; font-weight:700; font-size:14px;
+    border:none; border-radius:9px; padding:11px 18px; cursor:pointer;
+    transition: transform .12s ease, filter .12s ease;
+  }
+  .btn:focus-visible{ outline:2px solid var(--ring); outline-offset:2px; }
+  .btn:active{ transform: translateY(1px); }
+  .btn:disabled{ opacity:.6; cursor:default; }
+  .btn-primary{ background: var(--mustard); color:#251C0B; }
+  .btn-primary:hover{ filter:brightness(1.07); }
+  .btn-ghost{ background:transparent; color:#E7E1CE; border:1px solid #454F41; }
+  .btn-ghost:hover{ background:#2B372D; }
+  .btn-danger{ background:transparent; color:#E7A891; border:1px solid #5A342A; }
+  .btn-danger:hover{ background:#3A241E; }
+
+  .tagbar{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:26px; }
+  .chip{
+    font-family:'IBM Plex Mono', monospace; font-size:11.5px; letter-spacing:.03em;
+    padding:6px 11px; border-radius:20px; border:1px solid #454F41; color:#CFC9B6;
+    background:transparent; cursor:pointer; text-transform:uppercase;
+  }
+  .chip.active{ background:var(--mustard); border-color:var(--mustard); color:#251C0B; }
+  .chip:focus-visible{ outline:2px solid var(--ring); outline-offset:2px; }
+
+  .grid{
+    display:grid; grid-template-columns: repeat(auto-fill, minmax(230px,1fr));
+    gap: 22px;
+  }
+  .empty, .err-box{
+    grid-column: 1/-1; text-align:center; padding: 60px 20px; color:#A7A188;
+    font-family:'Fraunces',serif; font-size:19px;
+  }
+  .empty span, .err-box span{ display:block; font-family:'Karla',sans-serif; font-size:13.5px; margin-top:8px; color:#8E8B78;}
+  .err-box{ color:#E7A891; }
+
+  .card{
+    position:relative; background:var(--card); color:var(--ink);
+    border-radius:3px; padding:18px 17px 16px; cursor:pointer;
+    box-shadow: 0 10px 22px rgba(0,0,0,.28), 0 2px 0 var(--card-edge);
+    transform: rotate(var(--r,0deg));
+    transition: transform .15s ease, box-shadow .15s ease;
+    border:1px solid var(--card-edge);
+  }
+  .card:nth-child(3n){ --r:-0.6deg; }
+  .card:nth-child(3n+1){ --r:0.5deg; }
+  .card:nth-child(3n+2){ --r:-0.2deg; }
+  .card:hover{ transform: rotate(0deg) translateY(-3px); box-shadow: 0 16px 30px rgba(0,0,0,.34); }
+  .card:focus-visible{ outline:2px solid var(--mustard-deep); outline-offset:3px; }
+  .pin{
+    position:absolute; top:-7px; left:50%; transform:translateX(-50%);
+    width:12px; height:12px; border-radius:50%;
+    background: radial-gradient(circle at 35% 30%, #d8cfb4, var(--pin));
+    box-shadow: 0 2px 3px rgba(0,0,0,.35);
+  }
+  .card-thumb{
+    width:100%; height:120px; object-fit:cover; border-radius:2px; margin-bottom:10px;
+    filter: saturate(0.98);
+  }
+  .card-name{
+    font-family:'Fraunces',serif; font-weight:600; font-size:19px; line-height:1.15;
+    margin:0 0 8px;
+  }
+  .card-meta{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
+  .tag-pill{
+    font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.03em;
+    text-transform:uppercase; padding:3px 8px; border-radius:20px;
+    background:#EFE7CE; color:#6B5A2E; border:1px solid #E0D3A8;
+  }
+  .card-snippet{ font-size:13px; color:var(--ink-soft); line-height:1.4;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .card-source{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8C8262; margin-top:10px; }
+
+  /* Modal */
+  .overlay{
+    position:fixed; inset:0; background:rgba(15,18,14,.72); backdrop-filter: blur(2px);
+    display:flex; align-items:flex-start; justify-content:center; padding: 26px 14px;
+    overflow-y:auto; z-index:50;
+  }
+  .modal{
+    background:var(--card); color:var(--ink); width:100%; max-width:560px;
+    border-radius:6px; padding:26px 24px 24px; margin-top:20px;
+    box-shadow: 0 30px 60px rgba(0,0,0,.45);
+  }
+  .modal h2{ font-family:'Fraunces',serif; font-size:26px; margin:0 0 4px; font-weight:600;}
+  .modal-close{
+    float:right; background:none; border:none; font-size:20px; cursor:pointer; color:var(--ink-soft);
+    line-height:1; padding:4px;
+  }
+  .field{ margin-bottom:16px; }
+  .field label{
+    display:block; font-family:'IBM Plex Mono',monospace; font-size:10.5px;
+    text-transform:uppercase; letter-spacing:.08em; color:#8C8262; margin-bottom:6px;
+  }
+  .field input[type=text], .field input[type=url], .field textarea{
+    width:100%; border:1px solid #DED2AC; border-radius:7px; padding:10px 12px;
+    font-family:'Karla',sans-serif; font-size:14.5px; background:#FFFDF6; color:var(--ink);
+  }
+  .field textarea{ min-height:110px; resize:vertical; font-family:'Karla',sans-serif; line-height:1.5;}
+  .field input:focus, .field textarea:focus{ outline:2px solid var(--mustard-deep); outline-offset:1px; }
+  .chiprow{ display:flex; flex-wrap:wrap; gap:7px; }
+  .chip-select{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; text-transform:uppercase;
+    padding:6px 10px; border-radius:20px; border:1px solid #DAC98A; background:#FFFDF6;
+    color:#6B5A2E; cursor:pointer;
+  }
+  .chip-select.active{ background:var(--mustard); border-color:var(--mustard); color:#251C0B; }
+  .customtag{ display:flex; gap:8px; margin-top:9px; }
+  .customtag input{ flex:1; }
+  .imgpick{
+    display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  }
+  .imgpick img{ width:74px; height:74px; object-fit:cover; border-radius:6px; border:1px solid #DED2AC;}
+  .filelabel{
+    font-size:13px; font-weight:600; padding:9px 14px; border-radius:8px;
+    background:#F1E9D2; color:#5E4E22; cursor:pointer; border:1px solid #DAC98A;
+  }
+  .modal-actions{ display:flex; justify-content:space-between; align-items:center; margin-top:22px; gap:10px; flex-wrap:wrap;}
+  .modal-actions .right{ display:flex; gap:10px; }
+
+  .detail-tags{ display:flex; flex-wrap:wrap; gap:6px; margin:10px 0 16px; }
+  .detail-img{ width:100%; max-height:280px; object-fit:cover; border-radius:6px; margin-bottom:14px; }
+  .detail-link{ color:var(--mustard-deep); font-weight:700; text-decoration:none; word-break:break-all; }
+  .detail-link:hover{ text-decoration:underline; }
+  .detail-text{ white-space:pre-wrap; line-height:1.6; font-size:14.5px; color:#3A362C; margin-top:6px; }
+  .detail-date{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#9C947C; margin-top:18px; }
+
+  .loading{ grid-column: 1/-1; text-align:center; padding:60px 10px; color:#B7B199; font-family:'Karla',sans-serif; }
+
+  @media (prefers-reduced-motion: reduce){
+    .card, .btn{ transition:none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <header class="top">
+    <div class="eyebrow">Delad receptbok</div>
+    <h1>Receptlådan</h1>
+    <p class="sub">Spara recept ni snappar upp var som helst ifrån — mejl, bild eller länk — på ett ställe ni båda kommer åt.</p>
+  </header>
+
+  <div class="toolbar">
+    <input class="search" id="searchInput" type="text" placeholder="Sök på receptnamn…">
+    <button class="btn btn-primary" id="openAddBtn">+ Nytt recept</button>
+  </div>
+
+  <div class="tagbar" id="tagBar"></div>
+
+  <div class="grid" id="grid">
+    <div class="loading">Läser in recept…</div>
+  </div>
+</div>
+
+<div id="modalRoot"></div>
+
+<script type="module">
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+const SUPABASE_URL = "https://xulnmhxfsmrxtujghvho.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh1bG5taHhmc21yeHR1amdodmhvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2MTk3NDEsImV4cCI6MjA5OTE5NTc0MX0.zvbQBO-kgnCf28vHm8punXQBY5N6CuGJinaTt8tbWms";
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+window.addEventListener('error', (e) => {
+  const grid = document.getElementById('grid');
+  if(grid) grid.innerHTML = `<div class="err-box">Något gick fel.<span>${(e.message||'Okänt fel')}</span></div>`;
+});
+window.addEventListener('unhandledrejection', (e) => {
+  const grid = document.getElementById('grid');
+  if(grid) grid.innerHTML = `<div class="err-box">Något gick fel.<span>${(e.reason && e.reason.message) || e.reason || 'Okänt fel'}</span></div>`;
+});
+
+const DEFAULT_TAGS = ["Förrätt","Huvudrätt","Efterrätt","Fisk","Kött","Vegetariskt","Bakning","Snabbmat"];
+let recipes = [];
+let activeTagFilters = new Set();
+let searchTerm = "";
+
+const grid = document.getElementById('grid');
+const tagBar = document.getElementById('tagBar');
+const modalRoot = document.getElementById('modalRoot');
+const searchInput = document.getElementById('searchInput');
+
+async function loadRecipes(){
+  const { data, error } = await sb.from('recipes').select('*').order('created_at', { ascending:false });
+  if(error){
+    grid.innerHTML = `<div class="err-box">Kunde inte hämta recepten.<span>${escapeHtml(error.message)}</span></div>`;
+    return;
+  }
+  recipes = data || [];
+  renderTagBar();
+  renderGrid();
+}
+
+function allTagsInUse(){
+  const s = new Set(DEFAULT_TAGS);
+  recipes.forEach(r => (r.tags||[]).forEach(t => s.add(t)));
+  return Array.from(s);
+}
+
+function renderTagBar(){
+  const tags = allTagsInUse();
+  tagBar.innerHTML = '';
+  tags.forEach(tag => {
+    const b = document.createElement('button');
+    b.className = 'chip' + (activeTagFilters.has(tag) ? ' active' : '');
+    b.textContent = tag;
+    b.onclick = () => {
+      if(activeTagFilters.has(tag)) activeTagFilters.delete(tag);
+      else activeTagFilters.add(tag);
+      renderTagBar(); renderGrid();
+    };
+    tagBar.appendChild(b);
+  });
+}
+
+function matchesFilters(r){
+  const nameOk = r.name.toLowerCase().includes(searchTerm.toLowerCase());
+  const tagOk = activeTagFilters.size === 0 || (r.tags||[]).some(t => activeTagFilters.has(t));
+  return nameOk && tagOk;
+}
+
+function snippetFor(r){
+  if(r.note) return r.note;
+  if(r.link) return r.link;
+  return 'Inget innehåll utöver bild.';
+}
+
+function renderGrid(){
+  const list = recipes.filter(matchesFilters);
+  grid.innerHTML = '';
+  if(list.length === 0){
+    grid.innerHTML = `<div class="empty">Tomt så här långt.<span>Tryck på "+ Nytt recept" för att spara det första.</span></div>`;
+    return;
+  }
+  list.forEach(r => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.tabIndex = 0;
+    card.setAttribute('role','button');
+    card.onclick = () => openDetail(r.id);
+    card.onkeydown = (e) => { if(e.key === 'Enter') openDetail(r.id); };
+    card.innerHTML = `
+      <div class="pin"></div>
+      ${r.image ? `<img class="card-thumb" src="${r.image}" alt="">` : ''}
+      <div class="card-name">${escapeHtml(r.name)}</div>
+      <div class="card-meta">${(r.tags||[]).map(t => `<span class="tag-pill">${escapeHtml(t)}</span>`).join('')}</div>
+      <div class="card-snippet">${escapeHtml(snippetFor(r))}</div>
+      <div class="card-source">${r.link ? '🔗 länk' : ''} ${r.image ? '🖼 bild' : ''} ${(!r.link && !r.image) ? '📝 anteckning' : ''}</div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+function escapeHtml(s){
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+searchInput.addEventListener('input', (e) => { searchTerm = e.target.value; renderGrid(); });
+
+document.getElementById('openAddBtn').onclick = () => openForm(null);
+
+function openDetail(id){
+  const r = recipes.find(x => x.id === id);
+  if(!r) return;
+  modalRoot.innerHTML = `
+    <div class="overlay" id="ovDetail">
+      <div class="modal">
+        <button class="modal-close" id="closeDetail" aria-label="Stäng">✕</button>
+        <h2>${escapeHtml(r.name)}</h2>
+        <div class="detail-tags">${(r.tags||[]).map(t=>`<span class="tag-pill">${escapeHtml(t)}</span>`).join('')}</div>
+        ${r.image ? `<img class="detail-img" src="${r.image}" alt="">` : ''}
+        ${r.link ? `<div><a class="detail-link" href="${r.link}" target="_blank" rel="noopener">${escapeHtml(r.link)}</a></div>` : ''}
+        ${r.note ? `<div class="detail-text">${escapeHtml(r.note)}</div>` : ''}
+        <div class="detail-date">Sparat ${new Date(r.created_at).toLocaleDateString('sv-SE', {year:'numeric', month:'long', day:'numeric'})}</div>
+        <div id="detailError" style="display:none; color:#A8432B; font-size:13.5px; margin-bottom:10px; font-weight:600;"></div>
+        <div class="modal-actions">
+          <button class="btn btn-danger" id="deleteBtn">Ta bort</button>
+          <div class="right">
+            <button class="btn btn-ghost" id="editBtn">Redigera</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('closeDetail').onclick = closeModal;
+  document.getElementById('ovDetail').onclick = (e) => { if(e.target.id === 'ovDetail') closeModal(); };
+  const deleteBtn = document.getElementById('deleteBtn');
+  let deleteArmed = false;
+  deleteBtn.onclick = async () => {
+    const detailError = document.getElementById('detailError');
+    if(!deleteArmed){
+      deleteArmed = true;
+      deleteBtn.textContent = 'Säker? Klicka igen';
+      setTimeout(() => { deleteArmed = false; if(deleteBtn) deleteBtn.textContent = 'Ta bort'; }, 3000);
+      return;
+    }
+    deleteBtn.disabled = true; deleteBtn.textContent = 'Tar bort…';
+    const { error } = await sb.from('recipes').delete().eq('id', id);
+    if(error){
+      detailError.textContent = 'Kunde inte ta bort: ' + error.message;
+      detailError.style.display = '';
+      deleteBtn.disabled = false; deleteBtn.textContent = 'Ta bort'; deleteArmed = false;
+      return;
+    }
+    closeModal();
+    await loadRecipes();
+  };
+  document.getElementById('editBtn').onclick = () => openForm(r.id);
+}
+
+function closeModal(){ modalRoot.innerHTML = ''; }
+
+function openForm(id){
+  const existing = id ? recipes.find(r => r.id === id) : null;
+  const chosenTags = new Set(existing ? existing.tags : []);
+  let imageData = existing ? existing.image || null : null;
+
+  modalRoot.innerHTML = `
+    <div class="overlay" id="ovForm">
+      <div class="modal">
+        <button class="modal-close" id="closeForm" aria-label="Stäng">✕</button>
+        <h2>${existing ? 'Redigera recept' : 'Nytt recept'}</h2>
+        <div class="field">
+          <label for="fName">Receptnamn</label>
+          <input type="text" id="fName" value="${existing ? escapeHtml(existing.name) : ''}" placeholder="T.ex. Mammas köttbullar">
+        </div>
+        <div class="field">
+          <label>Taggar</label>
+          <div class="chiprow" id="chipRow"></div>
+          <div class="customtag">
+            <input type="text" id="fCustomTag" placeholder="Lägg till egen tagg…">
+            <button class="btn btn-ghost" id="addCustomTag" type="button">Lägg till</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="fLink">Länk (valfritt)</label>
+          <input type="url" id="fLink" value="${existing && existing.link ? escapeHtml(existing.link) : ''}" placeholder="https://…">
+        </div>
+        <div class="field">
+          <label for="fText">Anteckning / receptext (valfritt)</label>
+          <textarea id="fText" placeholder="Klistra in eller skriv receptet, eller lägg till en kommentar…">${existing && existing.note ? escapeHtml(existing.note) : ''}</textarea>
+        </div>
+        <div class="field">
+          <label>Bild (valfritt)</label>
+          <div class="imgpick">
+            <label class="filelabel" for="fImage">Välj bild</label>
+            <input type="file" id="fImage" accept="image/*" style="display:none">
+            <img id="imgPreview" style="${imageData ? '' : 'display:none'}" src="${imageData || ''}">
+            <button class="btn btn-ghost" id="removeImg" type="button" style="${imageData ? '' : 'display:none'}">Ta bort bild</button>
+          </div>
+        </div>
+        <div id="formError" style="display:none; color:#A8432B; font-size:13.5px; margin-bottom:10px; font-weight:600;"></div>
+        <div class="modal-actions">
+          <span></span>
+          <div class="right">
+            <button class="btn btn-ghost" id="cancelForm" type="button">Avbryt</button>
+            <button class="btn btn-primary" id="saveForm" type="button">Spara recept</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const chipRow = document.getElementById('chipRow');
+  function renderChips(){
+    chipRow.innerHTML = '';
+    allTagsInUse().forEach(tag => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'chip-select' + (chosenTags.has(tag) ? ' active' : '');
+      b.textContent = tag;
+      b.onclick = () => {
+        if(chosenTags.has(tag)) chosenTags.delete(tag); else chosenTags.add(tag);
+        renderChips();
+      };
+      chipRow.appendChild(b);
+    });
+  }
+  renderChips();
+
+  document.getElementById('addCustomTag').onclick = () => {
+    const input = document.getElementById('fCustomTag');
+    const val = input.value.trim();
+    if(val){ chosenTags.add(val); input.value=''; renderChips(); }
+  };
+
+  const fileInput = document.getElementById('fImage');
+  fileInput.onchange = (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const maxDim = 900;
+        let w = img.width, h = img.height;
+        if(w > h && w > maxDim){ h = h*(maxDim/w); w = maxDim; }
+        else if(h > maxDim){ w = w*(maxDim/h); h = maxDim; }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        imageData = canvas.toDataURL('image/jpeg', 0.72);
+        document.getElementById('imgPreview').src = imageData;
+        document.getElementById('imgPreview').style.display = '';
+        document.getElementById('removeImg').style.display = '';
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+  document.getElementById('removeImg').onclick = () => {
+    imageData = null;
+    document.getElementById('imgPreview').style.display = 'none';
+    document.getElementById('removeImg').style.display = 'none';
+    fileInput.value = '';
+  };
+
+  document.getElementById('closeForm').onclick = closeModal;
+  document.getElementById('cancelForm').onclick = closeModal;
+  document.getElementById('ovForm').onclick = (e) => { if(e.target.id === 'ovForm') closeModal(); };
+
+  document.getElementById('saveForm').onclick = async () => {
+    const formError = document.getElementById('formError');
+    formError.style.display = 'none';
+    const name = document.getElementById('fName').value.trim();
+    if(!name){ formError.textContent = 'Skriv ett receptnamn.'; formError.style.display=''; return; }
+    const link = document.getElementById('fLink').value.trim();
+    const note = document.getElementById('fText').value.trim();
+    const saveBtn = document.getElementById('saveForm');
+    saveBtn.textContent = 'Sparar…'; saveBtn.disabled = true;
+
+    const payload = {
+      name,
+      link: link || null,
+      note: note || null,
+      image: imageData,
+      tags: Array.from(chosenTags)
+    };
+
+    let error;
+    if(existing){
+      ({ error } = await sb.from('recipes').update(payload).eq('id', existing.id));
+    }else{
+      ({ error } = await sb.from('recipes').insert([payload]));
+    }
+
+    if(error){
+      formError.textContent = 'Kunde inte spara: ' + error.message;
+      formError.style.display = '';
+      saveBtn.textContent = 'Spara recept'; saveBtn.disabled = false;
+      return;
+    }
+    closeModal();
+    await loadRecipes();
+  };
+}
+
+loadRecipes();
+</script>
+</body>
+</html>
