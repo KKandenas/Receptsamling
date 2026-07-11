@@ -264,6 +264,10 @@
     background:none; border:none; color:var(--mustard); text-decoration:underline; cursor:pointer;
     font-family:'Karla',sans-serif; font-size:13px; padding:0;
   }
+  .whoami input[type=text]{
+    background:#26332A; border:1px solid #3A4438; border-radius:6px; color:#F3EFE2;
+    font-family:'Karla',sans-serif; font-size:13px; padding:5px 9px; width:160px;
+  }
   .scope-toggle{ display:flex; gap:6px; }
   .scope-btn{
     font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:.03em; text-transform:uppercase;
@@ -301,11 +305,15 @@
     <div class="eyebrow">Delad receptbok</div>
     <h1>Receptlådan</h1>
     <p class="sub">Spara recept ni snappar upp var som helst ifrån — mejl, bild eller länk — på ett ställe ni båda kommer åt.</p>
-    <div class="whoami">Du sparar som <strong id="whoamiName"></strong> · <button id="switchUserBtn" type="button">byt receptlåda</button></div>
+    <div class="whoami" id="whoamiContainer"></div>
   </header>
 
   <div class="toolbar">
     <input class="search" id="searchInput" type="text" placeholder="Sök på receptnamn…">
+    <select class="search" id="sortSelect" style="flex:0 0 auto; min-width:150px; cursor:pointer;">
+      <option value="recent">Senast tillagda</option>
+      <option value="alpha">Bokstavsordning (A–Ö)</option>
+    </select>
     <div class="scope-toggle">
       <button class="scope-btn active" id="scopeAll" type="button">Alla recept</button>
       <button class="scope-btn" id="scopeMine" type="button">Mina recept</button>
@@ -345,6 +353,7 @@ let allTags = []; // [{id, name}]
 let allUsers = []; // [{id, name}]
 let currentUser = null; // {id, name}
 let viewScope = 'all'; // 'all' | 'mine'
+let sortMode = 'recent'; // 'recent' | 'alpha'
 let activeTagFilters = new Set();
 let searchTerm = "";
 
@@ -412,12 +421,49 @@ function renderUserChooser(){
   });
 }
 
+function renderWhoAmI(editing){
+  const container = document.getElementById('whoamiContainer');
+  if(!currentUser){ container.innerHTML = ''; return; }
+  if(editing){
+    container.innerHTML = `
+      Byt namn: <input type="text" id="renameInput" value="${escapeHtml(currentUser.name)}">
+      <button id="renameSave" type="button">Spara</button>
+      <button id="renameCancel" type="button">Avbryt</button>
+      <span id="renameError" style="display:none; color:#E7A891;"></span>
+    `;
+    document.getElementById('renameSave').onclick = async () => {
+      const input = document.getElementById('renameInput');
+      const newName = input.value.trim();
+      const err = document.getElementById('renameError');
+      err.style.display = 'none';
+      if(!newName){ err.textContent = 'Skriv ett namn.'; err.style.display = ''; return; }
+      if(newName === currentUser.name){ renderWhoAmI(false); return; }
+      if(allUsers.some(u => u.name === newName && u.id !== currentUser.id)){
+        err.textContent = 'Det namnet är redan taget.'; err.style.display = ''; return;
+      }
+      const { error } = await sb.from('users').update({ name: newName }).eq('id', currentUser.id);
+      if(error){ err.textContent = 'Kunde inte spara: ' + error.message; err.style.display = ''; return; }
+      currentUser = { ...currentUser, name: newName };
+      saveUserToStorage(currentUser);
+      allUsers = allUsers.map(u => u.id === currentUser.id ? currentUser : u);
+      renderWhoAmI(false);
+      renderGrid();
+    };
+    document.getElementById('renameCancel').onclick = () => renderWhoAmI(false);
+    document.getElementById('renameInput').focus();
+  }else{
+    container.innerHTML = `Du sparar som <strong>${escapeHtml(currentUser.name)}</strong> · <button id="renameUserBtn" type="button">byt namn</button> · <button id="switchUserBtn" type="button">byt receptlåda</button>`;
+    document.getElementById('renameUserBtn').onclick = () => renderWhoAmI(true);
+    document.getElementById('switchUserBtn').onclick = switchUser;
+  }
+}
+
 async function selectUser(u){
   currentUser = u;
   saveUserToStorage(u);
   document.getElementById('chooserScreen').style.display = 'none';
   document.getElementById('app').style.display = '';
-  document.getElementById('whoamiName').textContent = u.name;
+  renderWhoAmI(false);
   await loadRecipes();
 }
 
@@ -442,8 +488,6 @@ document.getElementById('createUserBtn').onclick = async () => {
   await selectUser(data[0]);
 };
 
-document.getElementById('switchUserBtn').onclick = switchUser;
-
 document.getElementById('scopeAll').onclick = () => setScope('all');
 document.getElementById('scopeMine').onclick = () => setScope('mine');
 function setScope(scope){
@@ -460,7 +504,7 @@ async function boot(){
   if(stillValid){
     currentUser = saved;
     document.getElementById('app').style.display = '';
-    document.getElementById('whoamiName').textContent = currentUser.name;
+    renderWhoAmI(false);
     await loadRecipes();
   }else{
     document.getElementById('app').style.display = 'none';
@@ -521,7 +565,20 @@ function imagesOf(r){
 }
 
 function renderGrid(){
-  const list = recipes.filter(matchesFilters);
+  let list = recipes.filter(matchesFilters);
+
+  // When browsing everyone's recipes, hide copies whose original still exists elsewhere,
+  // so a recipe you copied into your own box doesn't show up twice.
+  if(viewScope === 'all'){
+    const idsPresent = new Set(recipes.map(r => r.id));
+    list = list.filter(r => !(r.copied_from && idsPresent.has(r.copied_from)));
+  }
+
+  list = list.slice().sort((a,b) => {
+    if(sortMode === 'alpha') return a.name.localeCompare(b.name, 'sv');
+    return new Date(b.created_at) - new Date(a.created_at);
+  });
+
   grid.innerHTML = '';
   if(list.length === 0){
     grid.innerHTML = `<div class="empty">Tomt så här långt.<span>Tryck på "+ Nytt recept" för att spara det första.</span></div>`;
@@ -555,6 +612,7 @@ function escapeHtml(s){
 }
 
 searchInput.addEventListener('input', (e) => { searchTerm = e.target.value; renderGrid(); });
+document.getElementById('sortSelect').addEventListener('change', (e) => { sortMode = e.target.value; renderGrid(); });
 
 document.getElementById('openAddBtn').onclick = () => openForm(null);
 
@@ -620,7 +678,7 @@ function openDetail(id){
       copyBtn.disabled = true; copyBtn.textContent = 'Kopierar…';
       const payload = {
         name: r.name, link: r.link, note: r.note, images: imagesOf(r),
-        tags: r.tags || [], owner_id: currentUser.id
+        tags: r.tags || [], owner_id: currentUser.id, copied_from: r.id
       };
       const { error } = await sb.from('recipes').insert([payload]);
       if(error){
