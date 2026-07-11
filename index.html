@@ -244,18 +244,72 @@
   @media (prefers-reduced-motion: reduce){
     .card, .btn{ transition:none; }
   }
+
+  /* User chooser */
+  .chooser{
+    position:fixed; inset:0; background:var(--bg); z-index:200;
+    display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .chooser-card{ max-width:420px; width:100%; }
+  .user-list{ display:flex; flex-direction:column; gap:10px; margin-top:20px; }
+  .user-btn{
+    text-align:left; background:#26332A; border:1px solid #3A4438; border-radius:10px;
+    padding:14px 16px; color:#F3EFE2; font-family:'Fraunces',serif; font-size:17px; cursor:pointer;
+  }
+  .user-btn:hover{ background:#2B372D; }
+  .whoami{
+    display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13px; color:#B7B199; margin-top:2px;
+  }
+  .whoami button{
+    background:none; border:none; color:var(--mustard); text-decoration:underline; cursor:pointer;
+    font-family:'Karla',sans-serif; font-size:13px; padding:0;
+  }
+  .scope-toggle{ display:flex; gap:6px; }
+  .scope-btn{
+    font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:.03em; text-transform:uppercase;
+    padding:9px 13px; border-radius:8px; border:1px solid #454F41; color:#CFC9B6;
+    background:transparent; cursor:pointer;
+  }
+  .scope-btn.active{ background:var(--mustard); border-color:var(--mustard); color:#251C0B; }
+  .card-owner{
+    font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:.05em; text-transform:uppercase;
+    color:#9C947C; margin-top:4px;
+  }
+  .detail-owner{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.03em; text-transform:uppercase;
+    color:#9C947C; margin-bottom:6px;
+  }
 </style>
 </head>
 <body>
-<div class="wrap" id="app">
+<div class="chooser" id="chooserScreen" style="display:none;">
+  <div class="chooser-card">
+    <div class="eyebrow">Välkommen till</div>
+    <h1 style="margin-top:2px;">Receptlådan</h1>
+    <p class="sub">Välj din receptlåda för att komma igång.</p>
+    <div class="user-list" id="userList"></div>
+    <div class="addtagrow" style="margin-top:18px;">
+      <input type="text" id="newUserInput" placeholder="Nytt namn, t.ex. Anna">
+      <button class="btn btn-primary" id="createUserBtn" type="button">Skapa</button>
+    </div>
+    <div id="chooserError" style="display:none; color:#E7A891; font-size:13.5px; margin-top:10px;"></div>
+  </div>
+</div>
+
+<div class="wrap" id="app" style="display:none;">
   <header class="top">
     <div class="eyebrow">Delad receptbok</div>
     <h1>Receptlådan</h1>
     <p class="sub">Spara recept ni snappar upp var som helst ifrån — mejl, bild eller länk — på ett ställe ni båda kommer åt.</p>
+    <div class="whoami">Du sparar som <strong id="whoamiName"></strong> · <button id="switchUserBtn" type="button">byt receptlåda</button></div>
   </header>
 
   <div class="toolbar">
     <input class="search" id="searchInput" type="text" placeholder="Sök på receptnamn…">
+    <div class="scope-toggle">
+      <button class="scope-btn active" id="scopeAll" type="button">Alla recept</button>
+      <button class="scope-btn" id="scopeMine" type="button">Mina recept</button>
+    </div>
     <button class="btn btn-ghost" id="manageTagsBtn">Hantera taggar</button>
     <button class="btn btn-primary" id="openAddBtn">+ Nytt recept</button>
   </div>
@@ -288,8 +342,24 @@ window.addEventListener('unhandledrejection', (e) => {
 const DEFAULT_TAGS = ["Förrätt","Huvudrätt","Efterrätt","Fisk","Kött","Vegetariskt","Bakning","Snabbmat"];
 let recipes = [];
 let allTags = []; // [{id, name}]
+let allUsers = []; // [{id, name}]
+let currentUser = null; // {id, name}
+let viewScope = 'all'; // 'all' | 'mine'
 let activeTagFilters = new Set();
 let searchTerm = "";
+
+function loadUserFromStorage(){
+  try{
+    const raw = localStorage.getItem('receptladan_user');
+    return raw ? JSON.parse(raw) : null;
+  }catch(e){ return null; }
+}
+function saveUserToStorage(u){
+  try{ localStorage.setItem('receptladan_user', JSON.stringify(u)); }catch(e){ /* ignore */ }
+}
+function clearUserStorage(){
+  try{ localStorage.removeItem('receptladan_user'); }catch(e){ /* ignore */ }
+}
 
 const grid = document.getElementById('grid');
 const tagBar = document.getElementById('tagBar');
@@ -317,7 +387,87 @@ async function loadTags(){
   }
 }
 
-async function loadRecipes(){
+async function loadUsers(){
+  const { data, error } = await sb.from('users').select('*').order('name', { ascending:true });
+  allUsers = error ? [] : (data || []);
+}
+
+function ownerName(id){
+  const u = allUsers.find(x => x.id === id);
+  return u ? u.name : 'Okänd';
+}
+
+function renderUserChooser(){
+  const list = document.getElementById('userList');
+  list.innerHTML = '';
+  if(allUsers.length === 0){
+    list.innerHTML = '<div style="color:#A7A188; font-size:14px; font-family:\'Karla\',sans-serif;">Inga receptlådor än — skapa den första nedan.</div>';
+  }
+  allUsers.forEach(u => {
+    const b = document.createElement('button');
+    b.className = 'user-btn';
+    b.textContent = u.name + '’s recept';
+    b.onclick = () => selectUser(u);
+    list.appendChild(b);
+  });
+}
+
+async function selectUser(u){
+  currentUser = u;
+  saveUserToStorage(u);
+  document.getElementById('chooserScreen').style.display = 'none';
+  document.getElementById('app').style.display = '';
+  document.getElementById('whoamiName').textContent = u.name;
+  await loadRecipes();
+}
+
+function switchUser(){
+  clearUserStorage();
+  currentUser = null;
+  document.getElementById('app').style.display = 'none';
+  renderUserChooser();
+  document.getElementById('chooserScreen').style.display = 'flex';
+}
+
+document.getElementById('createUserBtn').onclick = async () => {
+  const input = document.getElementById('newUserInput');
+  const name = input.value.trim();
+  const err = document.getElementById('chooserError');
+  err.style.display = 'none';
+  if(!name){ err.textContent = 'Skriv ett namn.'; err.style.display = ''; return; }
+  const { data, error } = await sb.from('users').insert([{ name }]).select();
+  if(error){ err.textContent = 'Kunde inte skapa: ' + error.message; err.style.display = ''; return; }
+  allUsers = allUsers.concat(data);
+  input.value = '';
+  await selectUser(data[0]);
+};
+
+document.getElementById('switchUserBtn').onclick = switchUser;
+
+document.getElementById('scopeAll').onclick = () => setScope('all');
+document.getElementById('scopeMine').onclick = () => setScope('mine');
+function setScope(scope){
+  viewScope = scope;
+  document.getElementById('scopeAll').classList.toggle('active', scope === 'all');
+  document.getElementById('scopeMine').classList.toggle('active', scope === 'mine');
+  renderGrid();
+}
+
+async function boot(){
+  await loadUsers();
+  const saved = loadUserFromStorage();
+  const stillValid = saved && allUsers.some(u => u.id === saved.id);
+  if(stillValid){
+    currentUser = saved;
+    document.getElementById('app').style.display = '';
+    document.getElementById('whoamiName').textContent = currentUser.name;
+    await loadRecipes();
+  }else{
+    document.getElementById('app').style.display = 'none';
+    renderUserChooser();
+    document.getElementById('chooserScreen').style.display = 'flex';
+  }
+}
   const { data, error } = await sb.from('recipes').select('*').order('created_at', { ascending:false });
   if(error){
     grid.innerHTML = `<div class="err-box">Kunde inte hämta recepten.<span>${escapeHtml(error.message)}</span></div>`;
@@ -352,7 +502,8 @@ function renderTagBar(){
 function matchesFilters(r){
   const nameOk = r.name.toLowerCase().includes(searchTerm.toLowerCase());
   const tagOk = activeTagFilters.size === 0 || (r.tags||[]).some(t => activeTagFilters.has(t));
-  return nameOk && tagOk;
+  const scopeOk = viewScope === 'all' || r.owner_id === (currentUser && currentUser.id);
+  return nameOk && tagOk && scopeOk;
 }
 
 function snippetFor(r){
@@ -386,6 +537,7 @@ function renderGrid(){
       <div class="pin"></div>
       ${imgs[0] ? `<div style="position:relative;"><img class="card-thumb" src="${imgs[0]}" alt="">${imgs.length > 1 ? `<span class="tag-pill" style="position:absolute; bottom:6px; right:6px; background:#2A2620; color:#FBF6E9; border-color:#2A2620;">+${imgs.length - 1}</span>` : ''}</div>` : ''}
       <div class="card-name">${escapeHtml(r.name)}</div>
+      <div class="card-owner">${escapeHtml(ownerName(r.owner_id))}s recept</div>
       <div class="card-meta">${(r.tags||[]).map(t => `<span class="tag-pill">${escapeHtml(t)}</span>`).join('')}</div>
       <div class="card-snippet">${escapeHtml(snippetFor(r))}</div>
       <div class="card-source">${r.link ? '🔗 länk' : ''} ${imgs.length ? '🖼 bild' : ''} ${(!r.link && !imgs.length) ? '📝 anteckning' : ''}</div>
@@ -407,10 +559,12 @@ document.getElementById('openAddBtn').onclick = () => openForm(null);
 function openDetail(id){
   const r = recipes.find(x => x.id === id);
   if(!r) return;
+  const isMine = r.owner_id === (currentUser && currentUser.id);
   modalRoot.innerHTML = `
     <div class="overlay" id="ovDetail">
       <div class="modal">
         <button class="modal-close" id="closeDetail" aria-label="Stäng">✕</button>
+        <div class="detail-owner">${escapeHtml(ownerName(r.owner_id))}s recept</div>
         <h2>${escapeHtml(r.name)}</h2>
         <div class="detail-tags">${(r.tags||[]).map(t=>`<span class="tag-pill">${escapeHtml(t)}</span>`).join('')}</div>
         ${imagesOf(r).length ? `<div class="detail-gallery">${imagesOf(r).map((src,i) => `<img src="${src}" alt="" data-idx="${i}">`).join('')}</div>` : ''}
@@ -419,10 +573,10 @@ function openDetail(id){
         <div class="detail-date">Sparat ${new Date(r.created_at).toLocaleDateString('sv-SE', {year:'numeric', month:'long', day:'numeric'})}</div>
         <div id="detailError" style="display:none; color:#A8432B; font-size:13.5px; margin-bottom:10px; font-weight:600;"></div>
         <div class="modal-actions">
-          <button class="btn btn-danger" id="deleteBtn">Ta bort</button>
-          <div class="right">
-            <button class="btn btn-secondary" id="editBtn">Redigera</button>
-          </div>
+          ${isMine
+            ? `<button class="btn btn-danger" id="deleteBtn">Ta bort</button><div class="right"><button class="btn btn-secondary" id="editBtn">Redigera</button></div>`
+            : `<span></span><div class="right"><button class="btn btn-primary" id="copyBtn">Kopiera till min receptlåda</button></div>`
+          }
         </div>
       </div>
     </div>
@@ -433,28 +587,50 @@ function openDetail(id){
   modalRoot.querySelectorAll('.detail-gallery img').forEach(img => {
     img.onclick = () => openLightbox(galleryImgs, Number(img.dataset.idx));
   });
-  const deleteBtn = document.getElementById('deleteBtn');
-  let deleteArmed = false;
-  deleteBtn.onclick = async () => {
-    const detailError = document.getElementById('detailError');
-    if(!deleteArmed){
-      deleteArmed = true;
-      deleteBtn.textContent = 'Säker? Klicka igen';
-      setTimeout(() => { deleteArmed = false; if(deleteBtn) deleteBtn.textContent = 'Ta bort'; }, 3000);
-      return;
-    }
-    deleteBtn.disabled = true; deleteBtn.textContent = 'Tar bort…';
-    const { error } = await sb.from('recipes').delete().eq('id', id);
-    if(error){
-      detailError.textContent = 'Kunde inte ta bort: ' + error.message;
-      detailError.style.display = '';
-      deleteBtn.disabled = false; deleteBtn.textContent = 'Ta bort'; deleteArmed = false;
-      return;
-    }
-    closeModal();
-    await loadRecipes();
-  };
-  document.getElementById('editBtn').onclick = () => openForm(r.id);
+
+  if(isMine){
+    const deleteBtn = document.getElementById('deleteBtn');
+    let deleteArmed = false;
+    deleteBtn.onclick = async () => {
+      const detailError = document.getElementById('detailError');
+      if(!deleteArmed){
+        deleteArmed = true;
+        deleteBtn.textContent = 'Säker? Klicka igen';
+        setTimeout(() => { deleteArmed = false; if(deleteBtn) deleteBtn.textContent = 'Ta bort'; }, 3000);
+        return;
+      }
+      deleteBtn.disabled = true; deleteBtn.textContent = 'Tar bort…';
+      const { error } = await sb.from('recipes').delete().eq('id', id);
+      if(error){
+        detailError.textContent = 'Kunde inte ta bort: ' + error.message;
+        detailError.style.display = '';
+        deleteBtn.disabled = false; deleteBtn.textContent = 'Ta bort'; deleteArmed = false;
+        return;
+      }
+      closeModal();
+      await loadRecipes();
+    };
+    document.getElementById('editBtn').onclick = () => openForm(r.id);
+  }else{
+    document.getElementById('copyBtn').onclick = async () => {
+      const detailError = document.getElementById('detailError');
+      const copyBtn = document.getElementById('copyBtn');
+      copyBtn.disabled = true; copyBtn.textContent = 'Kopierar…';
+      const payload = {
+        name: r.name, link: r.link, note: r.note, images: imagesOf(r),
+        tags: r.tags || [], owner_id: currentUser.id
+      };
+      const { error } = await sb.from('recipes').insert([payload]);
+      if(error){
+        detailError.textContent = 'Kunde inte kopiera: ' + error.message;
+        detailError.style.display = '';
+        copyBtn.disabled = false; copyBtn.textContent = 'Kopiera till min receptlåda';
+        return;
+      }
+      closeModal();
+      await loadRecipes();
+    };
+  }
 }
 
 function closeModal(){ modalRoot.innerHTML = ''; }
@@ -752,7 +928,7 @@ function openForm(id){
     if(existing){
       ({ error } = await sb.from('recipes').update(payload).eq('id', existing.id));
     }else{
-      ({ error } = await sb.from('recipes').insert([payload]));
+      ({ error } = await sb.from('recipes').insert([{ ...payload, owner_id: currentUser.id }]));
     }
 
     if(error){
@@ -766,7 +942,7 @@ function openForm(id){
   };
 }
 
-loadRecipes();
+boot();
 </script>
 </body>
 </html>
