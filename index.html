@@ -171,6 +171,14 @@
     display:flex; align-items:center; gap:12px; flex-wrap:wrap;
   }
   .imgpick img{ width:74px; height:74px; object-fit:cover; border-radius:6px; border:1px solid #DED2AC;}
+  .thumb-row{ display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; }
+  .thumb-item{ position:relative; }
+  .thumb-item img{ width:74px; height:74px; object-fit:cover; border-radius:6px; border:1px solid #DED2AC; display:block; }
+  .thumb-remove{
+    position:absolute; top:-7px; right:-7px; width:22px; height:22px; border-radius:50%;
+    background:var(--brick); color:#FBF6E9; border:none; font-size:13px; line-height:1;
+    cursor:pointer; display:flex; align-items:center; justify-content:center;
+  }
   .filelabel{
     font-size:13px; font-weight:600; padding:9px 14px; border-radius:8px;
     background:#F1E9D2; color:#5E4E22; cursor:pointer; border:1px solid #DAC98A;
@@ -179,6 +187,8 @@
   .modal-actions .right{ display:flex; gap:10px; }
 
   .detail-tags{ display:flex; flex-wrap:wrap; gap:6px; margin:10px 0 16px; }
+  .detail-gallery{ display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:8px; margin-bottom:14px; }
+  .detail-gallery img{ width:100%; height:120px; object-fit:cover; border-radius:6px; cursor:pointer; }
   .detail-img{ width:100%; max-height:280px; object-fit:cover; border-radius:6px; margin-bottom:14px; }
   .detail-link{ color:var(--mustard-deep); font-weight:700; text-decoration:none; word-break:break-all; }
   .detail-link:hover{ text-decoration:underline; }
@@ -285,6 +295,12 @@ function snippetFor(r){
   return 'Inget innehåll utöver bild.';
 }
 
+function imagesOf(r){
+  if(r.images && r.images.length) return r.images;
+  if(r.image) return [r.image];
+  return [];
+}
+
 function renderGrid(){
   const list = recipes.filter(matchesFilters);
   grid.innerHTML = '';
@@ -293,6 +309,7 @@ function renderGrid(){
     return;
   }
   list.forEach(r => {
+    const imgs = imagesOf(r);
     const card = document.createElement('div');
     card.className = 'card';
     card.tabIndex = 0;
@@ -301,11 +318,11 @@ function renderGrid(){
     card.onkeydown = (e) => { if(e.key === 'Enter') openDetail(r.id); };
     card.innerHTML = `
       <div class="pin"></div>
-      ${r.image ? `<img class="card-thumb" src="${r.image}" alt="">` : ''}
+      ${imgs[0] ? `<div style="position:relative;"><img class="card-thumb" src="${imgs[0]}" alt="">${imgs.length > 1 ? `<span class="tag-pill" style="position:absolute; bottom:6px; right:6px; background:#2A2620; color:#FBF6E9; border-color:#2A2620;">+${imgs.length - 1}</span>` : ''}</div>` : ''}
       <div class="card-name">${escapeHtml(r.name)}</div>
       <div class="card-meta">${(r.tags||[]).map(t => `<span class="tag-pill">${escapeHtml(t)}</span>`).join('')}</div>
       <div class="card-snippet">${escapeHtml(snippetFor(r))}</div>
-      <div class="card-source">${r.link ? '🔗 länk' : ''} ${r.image ? '🖼 bild' : ''} ${(!r.link && !r.image) ? '📝 anteckning' : ''}</div>
+      <div class="card-source">${r.link ? '🔗 länk' : ''} ${imgs.length ? '🖼 bild' : ''} ${(!r.link && !imgs.length) ? '📝 anteckning' : ''}</div>
     `;
     grid.appendChild(card);
   });
@@ -330,7 +347,7 @@ function openDetail(id){
         <button class="modal-close" id="closeDetail" aria-label="Stäng">✕</button>
         <h2>${escapeHtml(r.name)}</h2>
         <div class="detail-tags">${(r.tags||[]).map(t=>`<span class="tag-pill">${escapeHtml(t)}</span>`).join('')}</div>
-        ${r.image ? `<img class="detail-img" src="${r.image}" alt="">` : ''}
+        ${imagesOf(r).length ? `<div class="detail-gallery">${imagesOf(r).map(src => `<img src="${src}" alt="" onclick="window.open(this.src, '_blank')">`).join('')}</div>` : ''}
         ${r.link ? `<div><a class="detail-link" href="${r.link}" target="_blank" rel="noopener">${escapeHtml(r.link)}</a></div>` : ''}
         ${r.note ? `<div class="detail-text">${escapeHtml(r.note)}</div>` : ''}
         <div class="detail-date">Sparat ${new Date(r.created_at).toLocaleDateString('sv-SE', {year:'numeric', month:'long', day:'numeric'})}</div>
@@ -375,7 +392,7 @@ function closeModal(){ modalRoot.innerHTML = ''; }
 function openForm(id){
   const existing = id ? recipes.find(r => r.id === id) : null;
   const chosenTags = new Set(existing ? existing.tags : []);
-  let imageData = existing ? existing.image || null : null;
+  let imageList = existing ? imagesOf(existing).slice() : [];
 
   modalRoot.innerHTML = `
     <div class="overlay" id="ovForm">
@@ -403,13 +420,12 @@ function openForm(id){
           <textarea id="fText" placeholder="Klistra in eller skriv receptet, eller lägg till en kommentar…">${existing && existing.note ? escapeHtml(existing.note) : ''}</textarea>
         </div>
         <div class="field">
-          <label>Bild (valfritt)</label>
+          <label>Bilder (valfritt, flera går bra)</label>
           <div class="imgpick">
-            <label class="filelabel" for="fImage">Välj bild</label>
-            <input type="file" id="fImage" accept="image/*" style="display:none">
-            <img id="imgPreview" style="${imageData ? '' : 'display:none'}" src="${imageData || ''}">
-            <button class="btn btn-ghost" id="removeImg" type="button" style="${imageData ? '' : 'display:none'}">Ta bort bild</button>
+            <label class="filelabel" for="fImage">Välj bilder</label>
+            <input type="file" id="fImage" accept="image/*" multiple style="display:none">
           </div>
+          <div class="thumb-row" id="thumbRow"></div>
         </div>
         <div id="formError" style="display:none; color:#A8432B; font-size:13.5px; margin-bottom:10px; font-weight:600;"></div>
         <div class="modal-actions">
@@ -446,34 +462,52 @@ function openForm(id){
     if(val){ chosenTags.add(val); input.value=''; renderChips(); }
   };
 
-  const fileInput = document.getElementById('fImage');
-  fileInput.onchange = (e) => {
-    const file = e.target.files[0];
-    if(!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const img = new Image();
-      img.onload = () => {
-        const maxDim = 900;
-        let w = img.width, h = img.height;
-        if(w > h && w > maxDim){ h = h*(maxDim/w); w = maxDim; }
-        else if(h > maxDim){ w = w*(maxDim/h); h = maxDim; }
-        const canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        imageData = canvas.toDataURL('image/jpeg', 0.72);
-        document.getElementById('imgPreview').src = imageData;
-        document.getElementById('imgPreview').style.display = '';
-        document.getElementById('removeImg').style.display = '';
+  const thumbRow = document.getElementById('thumbRow');
+  function renderThumbs(){
+    thumbRow.innerHTML = '';
+    imageList.forEach((src, idx) => {
+      const item = document.createElement('div');
+      item.className = 'thumb-item';
+      item.innerHTML = `<img src="${src}" alt=""><button type="button" class="thumb-remove" aria-label="Ta bort bild">✕</button>`;
+      item.querySelector('.thumb-remove').onclick = () => { imageList.splice(idx,1); renderThumbs(); };
+      thumbRow.appendChild(item);
+    });
+  }
+  renderThumbs();
+
+  function resizeToDataUrl(file){
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const img = new Image();
+        img.onload = () => {
+          const maxDim = 900;
+          let w = img.width, h = img.height;
+          if(w > h && w > maxDim){ h = h*(maxDim/w); w = maxDim; }
+          else if(h > maxDim){ w = w*(maxDim/h); h = maxDim; }
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', 0.72));
+        };
+        img.onerror = reject;
+        img.src = ev.target.result;
       };
-      img.src = ev.target.result;
-    };
-    reader.readAsDataURL(file);
-  };
-  document.getElementById('removeImg').onclick = () => {
-    imageData = null;
-    document.getElementById('imgPreview').style.display = 'none';
-    document.getElementById('removeImg').style.display = 'none';
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  const fileInput = document.getElementById('fImage');
+  fileInput.onchange = async (e) => {
+    const files = Array.from(e.target.files || []);
+    for(const file of files){
+      try{
+        const dataUrl = await resizeToDataUrl(file);
+        imageList.push(dataUrl);
+        renderThumbs();
+      }catch(err){ /* skip file that failed to process */ }
+    }
     fileInput.value = '';
   };
 
@@ -495,7 +529,7 @@ function openForm(id){
       name,
       link: link || null,
       note: note || null,
-      image: imageData,
+      images: imageList,
       tags: Array.from(chosenTags)
     };
 
