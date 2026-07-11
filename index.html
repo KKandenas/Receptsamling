@@ -468,6 +468,8 @@ async function boot(){
     document.getElementById('chooserScreen').style.display = 'flex';
   }
 }
+
+async function loadRecipes(){
   const { data, error } = await sb.from('recipes').select('*').order('created_at', { ascending:false });
   if(error){
     grid.innerHTML = `<div class="err-box">Kunde inte hämta recepten.<span>${escapeHtml(error.message)}</span></div>`;
