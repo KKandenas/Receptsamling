@@ -71,6 +71,8 @@
   .btn-primary:hover{ filter:brightness(1.07); }
   .btn-ghost{ background:transparent; color:#E7E1CE; border:1px solid #454F41; }
   .btn-ghost:hover{ background:#2B372D; }
+  .btn-secondary{ background:#EFE7CE; color:#5E4E22; border:1px solid #DAC98A; }
+  .btn-secondary:hover{ background:#E6DCB8; }
   .btn-danger{ background:transparent; color:#E7A891; border:1px solid #5A342A; }
   .btn-danger:hover{ background:#3A241E; }
 
@@ -197,6 +199,48 @@
 
   .loading{ grid-column: 1/-1; text-align:center; padding:60px 10px; color:#B7B199; font-family:'Karla',sans-serif; }
 
+  /* Lightbox */
+  .lightbox{
+    position:fixed; inset:0; background:rgba(10,12,9,.94); z-index:100;
+    display:flex; align-items:center; justify-content:center; flex-direction:column;
+  }
+  .lightbox-imgwrap{
+    flex:1; width:100%; overflow:auto; display:flex; align-items:center; justify-content:center;
+    touch-action: pinch-zoom pan-x pan-y;
+  }
+  .lightbox-imgwrap img{
+    max-width:none; transition: width .15s ease; cursor: zoom-in; touch-action: pinch-zoom pan-x pan-y;
+  }
+  .lightbox-controls{
+    display:flex; gap:10px; padding:14px; align-items:center;
+  }
+  .lightbox-controls button{
+    background:#2A2620; color:#FBF6E9; border:1px solid #454F41; border-radius:8px;
+    width:40px; height:40px; font-size:18px; cursor:pointer;
+  }
+  .lightbox-close{
+    position:absolute; top:14px; right:16px; background:none; border:none;
+    color:#FBF6E9; font-size:26px; cursor:pointer; padding:6px;
+  }
+  .lightbox-hint{ color:#A7A188; font-size:12px; font-family:'Karla',sans-serif; padding-bottom:4px; }
+
+  /* Tag manager */
+  .tagrow{
+    display:flex; align-items:center; gap:8px; padding:9px 0; border-bottom:1px solid #EDE4CC;
+  }
+  .tagrow input[type=text]{
+    flex:1; border:1px solid #DED2AC; border-radius:6px; padding:7px 10px;
+    font-family:'Karla',sans-serif; font-size:14px; background:#FFFDF6; color:var(--ink);
+  }
+  .tagrow-actions{ display:flex; gap:6px; }
+  .tagrow-actions button{
+    font-size:12.5px; font-weight:700; border-radius:6px; border:none; padding:7px 10px; cursor:pointer;
+  }
+  .tagrow-save{ background:var(--mustard); color:#251C0B; }
+  .tagrow-del{ background:transparent; color:var(--brick); border:1px solid #DFC7BE !important; }
+  .addtagrow{ display:flex; gap:8px; margin-top:14px; }
+  .addtagrow input{ flex:1; }
+
   @media (prefers-reduced-motion: reduce){
     .card, .btn{ transition:none; }
   }
@@ -212,6 +256,7 @@
 
   <div class="toolbar">
     <input class="search" id="searchInput" type="text" placeholder="Sök på receptnamn…">
+    <button class="btn btn-ghost" id="manageTagsBtn">Hantera taggar</button>
     <button class="btn btn-primary" id="openAddBtn">+ Nytt recept</button>
   </div>
 
@@ -242,6 +287,7 @@ window.addEventListener('unhandledrejection', (e) => {
 
 const DEFAULT_TAGS = ["Förrätt","Huvudrätt","Efterrätt","Fisk","Kött","Vegetariskt","Bakning","Snabbmat"];
 let recipes = [];
+let allTags = []; // [{id, name}]
 let activeTagFilters = new Set();
 let searchTerm = "";
 
@@ -250,6 +296,27 @@ const tagBar = document.getElementById('tagBar');
 const modalRoot = document.getElementById('modalRoot');
 const searchInput = document.getElementById('searchInput');
 
+async function loadTags(){
+  const { data, error } = await sb.from('tags').select('*').order('name', { ascending:true });
+  if(error){
+    // Table not created yet (e.g. migration not run) - fall back to defaults + whatever recipes use.
+    const s = new Set(DEFAULT_TAGS);
+    recipes.forEach(r => (r.tags||[]).forEach(t => s.add(t)));
+    allTags = Array.from(s).map(name => ({ id:null, name }));
+    return;
+  }
+  allTags = data || [];
+  // Auto-heal: any tag used on a recipe but missing from the tags table gets added, so it shows up in the manager.
+  const known = new Set(allTags.map(t => t.name));
+  const missing = new Set();
+  recipes.forEach(r => (r.tags||[]).forEach(t => { if(!known.has(t)) missing.add(t); }));
+  if(missing.size){
+    const rows = Array.from(missing).map(name => ({ name }));
+    const { data: inserted, error: insErr } = await sb.from('tags').insert(rows).select();
+    if(!insErr && inserted) allTags = allTags.concat(inserted).sort((a,b) => a.name.localeCompare(b.name,'sv'));
+  }
+}
+
 async function loadRecipes(){
   const { data, error } = await sb.from('recipes').select('*').order('created_at', { ascending:false });
   if(error){
@@ -257,14 +324,13 @@ async function loadRecipes(){
     return;
   }
   recipes = data || [];
+  await loadTags();
   renderTagBar();
   renderGrid();
 }
 
 function allTagsInUse(){
-  const s = new Set(DEFAULT_TAGS);
-  recipes.forEach(r => (r.tags||[]).forEach(t => s.add(t)));
-  return Array.from(s);
+  return allTags.map(t => t.name);
 }
 
 function renderTagBar(){
@@ -347,7 +413,7 @@ function openDetail(id){
         <button class="modal-close" id="closeDetail" aria-label="Stäng">✕</button>
         <h2>${escapeHtml(r.name)}</h2>
         <div class="detail-tags">${(r.tags||[]).map(t=>`<span class="tag-pill">${escapeHtml(t)}</span>`).join('')}</div>
-        ${imagesOf(r).length ? `<div class="detail-gallery">${imagesOf(r).map(src => `<img src="${src}" alt="" onclick="window.open(this.src, '_blank')">`).join('')}</div>` : ''}
+        ${imagesOf(r).length ? `<div class="detail-gallery">${imagesOf(r).map((src,i) => `<img src="${src}" alt="" data-idx="${i}">`).join('')}</div>` : ''}
         ${r.link ? `<div><a class="detail-link" href="${r.link}" target="_blank" rel="noopener">${escapeHtml(r.link)}</a></div>` : ''}
         ${r.note ? `<div class="detail-text">${escapeHtml(r.note)}</div>` : ''}
         <div class="detail-date">Sparat ${new Date(r.created_at).toLocaleDateString('sv-SE', {year:'numeric', month:'long', day:'numeric'})}</div>
@@ -355,7 +421,7 @@ function openDetail(id){
         <div class="modal-actions">
           <button class="btn btn-danger" id="deleteBtn">Ta bort</button>
           <div class="right">
-            <button class="btn btn-ghost" id="editBtn">Redigera</button>
+            <button class="btn btn-secondary" id="editBtn">Redigera</button>
           </div>
         </div>
       </div>
@@ -363,6 +429,10 @@ function openDetail(id){
   `;
   document.getElementById('closeDetail').onclick = closeModal;
   document.getElementById('ovDetail').onclick = (e) => { if(e.target.id === 'ovDetail') closeModal(); };
+  const galleryImgs = imagesOf(r);
+  modalRoot.querySelectorAll('.detail-gallery img').forEach(img => {
+    img.onclick = () => openLightbox(galleryImgs, Number(img.dataset.idx));
+  });
   const deleteBtn = document.getElementById('deleteBtn');
   let deleteArmed = false;
   deleteBtn.onclick = async () => {
@@ -389,6 +459,141 @@ function openDetail(id){
 
 function closeModal(){ modalRoot.innerHTML = ''; }
 
+function openLightbox(images, startIdx){
+  let idx = startIdx || 0;
+  let scale = 1;
+  const box = document.createElement('div');
+  box.className = 'lightbox';
+  box.innerHTML = `
+    <button class="lightbox-close" aria-label="Stäng">✕</button>
+    <div class="lightbox-imgwrap"><img src="${images[idx]}" alt=""></div>
+    <div class="lightbox-hint">Nyp för att zooma, eller använd knapparna</div>
+    <div class="lightbox-controls">
+      ${images.length > 1 ? '<button class="lb-prev" aria-label="Föregående">‹</button>' : ''}
+      <button class="lb-out" aria-label="Zooma ut">−</button>
+      <button class="lb-reset" aria-label="Återställ">⤢</button>
+      <button class="lb-in" aria-label="Zooma in">+</button>
+      ${images.length > 1 ? '<button class="lb-next" aria-label="Nästa">›</button>' : ''}
+    </div>
+  `;
+  document.body.appendChild(box);
+  const imgEl = box.querySelector('.lightbox-imgwrap img');
+  const wrap = box.querySelector('.lightbox-imgwrap');
+
+  function applyScale(){
+    imgEl.style.width = (scale * 100) + '%';
+  }
+  function setImage(){
+    imgEl.src = images[idx];
+    scale = 1;
+    applyScale();
+  }
+  box.querySelector('.lightbox-close').onclick = () => box.remove();
+  box.onclick = (e) => { if(e.target === box) box.remove(); };
+  box.querySelector('.lb-in').onclick = () => { scale = Math.min(scale + 0.4, 5); applyScale(); };
+  box.querySelector('.lb-out').onclick = () => { scale = Math.max(scale - 0.4, 0.5); applyScale(); };
+  box.querySelector('.lb-reset').onclick = () => { scale = 1; applyScale(); wrap.scrollLeft = 0; wrap.scrollTop = 0; };
+  imgEl.onclick = () => { scale = scale === 1 ? 2.2 : 1; applyScale(); };
+  const prev = box.querySelector('.lb-prev');
+  const next = box.querySelector('.lb-next');
+  if(prev) prev.onclick = () => { idx = (idx - 1 + images.length) % images.length; setImage(); };
+  if(next) next.onclick = () => { idx = (idx + 1) % images.length; setImage(); };
+  applyScale();
+}
+
+function openTagManager(){
+  modalRoot.innerHTML = `
+    <div class="overlay" id="ovTags">
+      <div class="modal">
+        <button class="modal-close" id="closeTags" aria-label="Stäng">✕</button>
+        <h2>Hantera taggar</h2>
+        <div id="tagList"></div>
+        <div id="tagMgrError" style="display:none; color:#A8432B; font-size:13.5px; margin-top:10px; font-weight:600;"></div>
+        <div class="addtagrow">
+          <input type="text" id="newTagInput" placeholder="Ny tagg…">
+          <button class="btn btn-secondary" id="addTagBtn" type="button">Lägg till</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('closeTags').onclick = async () => { closeModal(); await loadRecipes(); };
+  document.getElementById('ovTags').onclick = async (e) => { if(e.target.id === 'ovTags'){ closeModal(); await loadRecipes(); } };
+
+  const tagMgrError = document.getElementById('tagMgrError');
+  function showTagError(msg){ tagMgrError.textContent = msg; tagMgrError.style.display = ''; }
+
+  function renderTagList(){
+    const list = document.getElementById('tagList');
+    list.innerHTML = '';
+    allTags.forEach(tag => {
+      const row = document.createElement('div');
+      row.className = 'tagrow';
+      row.innerHTML = `
+        <input type="text" value="${escapeHtml(tag.name)}">
+        <div class="tagrow-actions">
+          <button class="tagrow-save" type="button">Spara</button>
+          <button class="tagrow-del" type="button">Ta bort</button>
+        </div>
+      `;
+      const input = row.querySelector('input');
+      const delBtn = row.querySelector('.tagrow-del');
+      let delArmed = false;
+
+      row.querySelector('.tagrow-save').onclick = async () => {
+        const newName = input.value.trim();
+        if(!newName || newName === tag.name) return;
+        if(!tag.id){ showTagError('Den här taggen kommer från ett recept och behöver köra databas-migreringen först.'); return; }
+        const { error } = await sb.from('tags').update({ name: newName }).eq('id', tag.id);
+        if(error){ showTagError('Kunde inte byta namn: ' + error.message); return; }
+        const affected = recipes.filter(r => (r.tags||[]).includes(tag.name));
+        for(const r of affected){
+          const newTags = r.tags.map(t => t === tag.name ? newName : t);
+          await sb.from('recipes').update({ tags: newTags }).eq('id', r.id);
+        }
+        await loadRecipes();
+        renderTagList();
+      };
+
+      delBtn.onclick = async () => {
+        if(!delArmed){
+          delArmed = true;
+          delBtn.textContent = 'Säker?';
+          setTimeout(() => { delArmed = false; if(delBtn) delBtn.textContent = 'Ta bort'; }, 3000);
+          return;
+        }
+        delBtn.disabled = true; delBtn.textContent = 'Tar bort…';
+        if(tag.id){
+          const { error } = await sb.from('tags').delete().eq('id', tag.id);
+          if(error){ showTagError('Kunde inte ta bort: ' + error.message); delBtn.disabled = false; delBtn.textContent = 'Ta bort'; return; }
+        }
+        const affected = recipes.filter(r => (r.tags||[]).includes(tag.name));
+        for(const r of affected){
+          const newTags = r.tags.filter(t => t !== tag.name);
+          await sb.from('recipes').update({ tags: newTags }).eq('id', r.id);
+        }
+        await loadRecipes();
+        renderTagList();
+      };
+
+      list.appendChild(row);
+    });
+  }
+  renderTagList();
+
+  document.getElementById('addTagBtn').onclick = async () => {
+    const input = document.getElementById('newTagInput');
+    const val = input.value.trim();
+    if(!val) return;
+    if(allTags.some(t => t.name === val)){ showTagError('Den taggen finns redan.'); return; }
+    const { data, error } = await sb.from('tags').insert([{ name: val }]).select();
+    if(error){ showTagError('Kunde inte lägga till: ' + error.message); return; }
+    allTags = allTags.concat(data).sort((a,b) => a.name.localeCompare(b.name,'sv'));
+    input.value = '';
+    renderTagList();
+  };
+}
+document.getElementById('manageTagsBtn').onclick = openTagManager;
+
 function openForm(id){
   const existing = id ? recipes.find(r => r.id === id) : null;
   const chosenTags = new Set(existing ? existing.tags : []);
@@ -408,7 +613,7 @@ function openForm(id){
           <div class="chiprow" id="chipRow"></div>
           <div class="customtag">
             <input type="text" id="fCustomTag" placeholder="Lägg till egen tagg…">
-            <button class="btn btn-ghost" id="addCustomTag" type="button">Lägg till</button>
+            <button class="btn btn-secondary" id="addCustomTag" type="button">Lägg till</button>
           </div>
         </div>
         <div class="field">
@@ -431,7 +636,7 @@ function openForm(id){
         <div class="modal-actions">
           <span></span>
           <div class="right">
-            <button class="btn btn-ghost" id="cancelForm" type="button">Avbryt</button>
+            <button class="btn btn-secondary" id="cancelForm" type="button">Avbryt</button>
             <button class="btn btn-primary" id="saveForm" type="button">Spara recept</button>
           </div>
         </div>
@@ -456,10 +661,20 @@ function openForm(id){
   }
   renderChips();
 
-  document.getElementById('addCustomTag').onclick = () => {
+  document.getElementById('addCustomTag').onclick = async () => {
     const input = document.getElementById('fCustomTag');
     const val = input.value.trim();
-    if(val){ chosenTags.add(val); input.value=''; renderChips(); }
+    if(!val) return;
+    chosenTags.add(val);
+    input.value = '';
+    renderChips();
+    if(!allTags.some(t => t.name === val)){
+      const { data, error } = await sb.from('tags').insert([{ name: val }]).select();
+      if(!error && data){
+        allTags = allTags.concat(data).sort((a,b) => a.name.localeCompare(b.name,'sv'));
+        renderChips();
+      }
+    }
   };
 
   const thumbRow = document.getElementById('thumbRow');
