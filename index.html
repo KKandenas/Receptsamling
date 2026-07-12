@@ -895,8 +895,18 @@ document.getElementById('exportPdfBtn').onclick = async () => {
     doc.setTextColor(130);
     const scopeLabel = viewScope === 'mine' ? (currentUser ? currentUser.name + 's recept' : 'Mina recept') : 'Alla recept';
     doc.text(`${scopeLabel} · exporterad ${new Date().toLocaleDateString('sv-SE', {year:'numeric', month:'long', day:'numeric'})} · ${list.length} st`, margin, y);
+    y += 14;
+
+    const filterBits = [];
+    if(searchTerm.trim()) filterBits.push(`Sökord: "${searchTerm.trim()}"`);
+    if(activeTagFilters.size) filterBits.push(`Taggar: ${Array.from(activeTagFilters).join(', ')}`);
+    if(filterBits.length){
+      doc.setFont('helvetica', 'italic');
+      doc.text('Filtrerat på — ' + filterBits.join('  ·  '), margin, y);
+      y += 14;
+    }
     doc.setTextColor(0);
-    y += 24;
+    y += 14;
 
     if(list.length === 0){
       doc.setFont('helvetica', 'italic');
@@ -957,11 +967,15 @@ document.getElementById('exportPdfBtn').onclick = async () => {
         });
       }
 
-      y += 16;
+      y += 26;
       if(idx < list.length - 1){
-        ensureSpace(1);
-        doc.setDrawColor(225);
-        doc.line(margin, y - 8, pageWidth - margin, y - 8);
+        ensureSpace(30);
+        doc.setDrawColor(150);
+        doc.setLineWidth(1.6);
+        doc.line(margin, y, pageWidth - margin, y);
+        doc.setLineWidth(0.5);
+        doc.setDrawColor(0);
+        y += 30;
       }
     });
 
