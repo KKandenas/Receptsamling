@@ -1,0 +1,17 @@
+name: Keep Supabase Awake
+
+on:
+  schedule:
+    - cron: '0 8 */3 * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase
+        run: |
+          curl -s -o /dev/null -w "Status: %{http_code}\n" \
+            "https://xulnmhxfsmrxtujghvho.supabase.co/rest/v1/tags?select=id&limit=1" \
+            -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh1bG5taHhmc21yeHR1amdodmhvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2MTk3NDEsImV4cCI6MjA5OTE5NTc0MX0.zvbQBO-kgnCf28vHm8punXQBY5N6CuGJinaTt8tbWms" \
+            -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh1bG5taHhmc21yeHR1amdodmhvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2MTk3NDEsImV4cCI6MjA5OTE5NTc0MX0.zvbQBO-kgnCf28vHm8punXQBY5N6CuGJinaTt8tbWms"
