@@ -319,6 +319,8 @@
       <button class="scope-btn" id="scopeMine" type="button">Mina recept</button>
     </div>
     <button class="btn btn-ghost" id="manageTagsBtn">Hantera taggar</button>
+    <button class="btn btn-ghost" id="exportBtn">Exportera recept</button>
+    <button class="btn btn-ghost" id="exportPdfBtn">Exportera som PDF</button>
     <button class="btn btn-primary" id="openAddBtn">+ Nytt recept</button>
   </div>
 
@@ -564,7 +566,7 @@ function imagesOf(r){
   return [];
 }
 
-function renderGrid(){
+function getFilteredSortedList(){
   let list = recipes.filter(matchesFilters);
 
   // When browsing everyone's recipes, hide copies whose original still exists elsewhere,
@@ -574,10 +576,14 @@ function renderGrid(){
     list = list.filter(r => !(r.copied_from && idsPresent.has(r.copied_from)));
   }
 
-  list = list.slice().sort((a,b) => {
+  return list.slice().sort((a,b) => {
     if(sortMode === 'alpha') return a.name.localeCompare(b.name, 'sv');
     return new Date(b.created_at) - new Date(a.created_at);
   });
+}
+
+function renderGrid(){
+  const list = getFilteredSortedList();
 
   grid.innerHTML = '';
   if(list.length === 0){
@@ -830,6 +836,144 @@ function openTagManager(){
 }
 document.getElementById('manageTagsBtn').onclick = openTagManager;
 
+document.getElementById('exportBtn').onclick = () => {
+  const btn = document.getElementById('exportBtn');
+  const originalText = btn.textContent;
+  try{
+    const backup = {
+      exporterad: new Date().toISOString(),
+      receptlador: allUsers,
+      taggar: allTags,
+      recept: recipes
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const dateStr = new Date().toISOString().slice(0,10);
+    a.href = url;
+    a.download = `receptladan-backup-${dateStr}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    btn.textContent = 'Nedladdad ✓';
+    setTimeout(() => { btn.textContent = originalText; }, 2000);
+  }catch(e){
+    btn.textContent = 'Kunde inte exportera';
+    setTimeout(() => { btn.textContent = originalText; }, 2500);
+  }
+};
+
+document.getElementById('exportPdfBtn').onclick = async () => {
+  const btn = document.getElementById('exportPdfBtn');
+  const originalText = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Skapar PDF…';
+  try{
+    const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm');
+    const list = getFilteredSortedList();
+
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 48;
+    const maxWidth = pageWidth - margin * 2;
+    let y = margin;
+
+    function ensureSpace(neededHeight){
+      if(y + neededHeight > pageHeight - margin){
+        doc.addPage();
+        y = margin;
+      }
+    }
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(20);
+    doc.text('Receptlådan', margin, y);
+    y += 20;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(130);
+    const scopeLabel = viewScope === 'mine' ? (currentUser ? currentUser.name + 's recept' : 'Mina recept') : 'Alla recept';
+    doc.text(`${scopeLabel} · exporterad ${new Date().toLocaleDateString('sv-SE', {year:'numeric', month:'long', day:'numeric'})} · ${list.length} st`, margin, y);
+    doc.setTextColor(0);
+    y += 24;
+
+    if(list.length === 0){
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(12);
+      doc.text('Inga recept matchade det du hade filtrerat på.', margin, y);
+    }
+
+    list.forEach((r, idx) => {
+      ensureSpace(50);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(15);
+      const nameLines = doc.splitTextToSize(r.name, maxWidth);
+      ensureSpace(nameLines.length * 18);
+      doc.text(nameLines, margin, y);
+      y += nameLines.length * 18;
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9.5);
+      doc.setTextColor(130);
+      const metaBits = [ownerName(r.owner_id) + 's recept'];
+      if(r.tags && r.tags.length) metaBits.push(r.tags.join(', '));
+      const metaLines = doc.splitTextToSize(metaBits.join('  ·  '), maxWidth);
+      ensureSpace(metaLines.length * 12 + 4);
+      doc.text(metaLines, margin, y);
+      y += metaLines.length * 12 + 6;
+      doc.setTextColor(0);
+
+      if(r.link){
+        ensureSpace(15);
+        doc.setFontSize(10.5);
+        doc.setTextColor(30, 90, 160);
+        const shownLink = r.link.length > 90 ? r.link.slice(0, 87) + '…' : r.link;
+        doc.textWithLink(shownLink, margin, y, { url: r.link });
+        doc.setTextColor(0);
+        y += 15;
+      }
+
+      const imgs = imagesOf(r);
+      if(imgs[0] && imgs[0].startsWith('data:image')){
+        try{
+          const props = doc.getImageProperties(imgs[0]);
+          const imgW = Math.min(150, maxWidth);
+          const imgH = imgW * (props.height / props.width);
+          ensureSpace(imgH + 8);
+          doc.addImage(imgs[0], margin, y, imgW, imgH);
+          y += imgH + 8;
+        }catch(e){ /* skip image that jsPDF can't read */ }
+      }
+
+      if(r.note){
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10.5);
+        const noteLines = doc.splitTextToSize(r.note, maxWidth);
+        noteLines.forEach(line => {
+          ensureSpace(14);
+          doc.text(line, margin, y);
+          y += 14;
+        });
+      }
+
+      y += 16;
+      if(idx < list.length - 1){
+        ensureSpace(1);
+        doc.setDrawColor(225);
+        doc.line(margin, y - 8, pageWidth - margin, y - 8);
+      }
+    });
+
+    doc.save(`receptladan-${new Date().toISOString().slice(0,10)}.pdf`);
+    btn.textContent = 'Klart ✓';
+  }catch(e){
+    console.error(e);
+    btn.textContent = 'Kunde inte skapa PDF';
+  }
+  setTimeout(() => { btn.disabled = false; btn.textContent = originalText; }, 2200);
+};
+
 function openForm(id){
   const existing = id ? recipes.find(r => r.id === id) : null;
   const chosenTags = new Set(existing ? existing.tags : []);
@@ -931,9 +1075,18 @@ function openForm(id){
   renderThumbs();
 
   async function fetchViaProxy(proxyUrl){
-    const res = await fetch(proxyUrl);
-    if(!res.ok) throw new Error('kod ' + res.status);
-    return await res.text();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    try{
+      const res = await fetch(proxyUrl, { signal: controller.signal });
+      if(!res.ok) throw new Error('kod ' + res.status);
+      return await res.text();
+    }catch(e){
+      if(e.name === 'AbortError') throw new Error('tog för lång tid (timeout)');
+      throw e;
+    }finally{
+      clearTimeout(timeout);
+    }
   }
 
   async function fetchLinkPreview(url){
