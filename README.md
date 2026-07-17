@@ -15,6 +15,7 @@ Byggd som en enda fristående webbsida (`index.html`), värd gratis på GitHub P
 - **Hämta info automatiskt** – klistra in en länk och låt appen försöka hämta titel och bild automatiskt från sidan.
 - **Zoombara bilder** – bra när receptet ligger inbakat i en bild (t.ex. ett foto av en kokbokssida).
 - **Egna taggar** – lägg till, byt namn på eller ta bort taggar/kategorier (förrätt, huvudrätt, fisk, kött, osv.) via "Hantera taggar".
+- **Betygsätt recept** – klicka på 1–5 stjärnor för att sätta ditt eget betyg. Varje person i receptlådan har sitt eget betyg, och kortet visar snittet av allas betyg.
 - **Sök, filtrera och sortera** – sök på namn, filtrera på taggar, sortera på senast tillagda eller bokstavsordning.
 - **Export** – exportera allt som en JSON-backup, eller som en snygg utskriftsvänlig PDF (med klickbara länkar), som respekterar aktiva filter.
 
@@ -69,6 +70,18 @@ create table if not exists recipes (
 );
 alter table recipes enable row level security;
 create policy "allow all" on recipes for all using (true) with check (true);
+
+-- Betyg
+create table if not exists ratings (
+  id uuid primary key default gen_random_uuid(),
+  recipe_id uuid not null references recipes(id) on delete cascade,
+  user_id uuid not null references users(id) on delete cascade,
+  rating smallint not null check (rating between 1 and 5),
+  created_at timestamptz default now(),
+  unique (recipe_id, user_id)
+);
+alter table ratings enable row level security;
+create policy "allow all" on ratings for all using (true) with check (true);
 
 -- Skapa en första receptlåda
 insert into users (name) values ('Irene') on conflict (name) do nothing;

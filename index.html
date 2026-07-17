@@ -133,6 +133,25 @@
     display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .card-source{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8C8262; margin-top:10px; }
 
+  .stars-row{ display:flex; align-items:center; gap:6px; }
+  .stars-glyphs{ color:var(--mustard-deep); letter-spacing:2px; font-size:14px; }
+  .stars-count{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8C8262; }
+  .stars-empty .stars-glyphs{ color:#D8CDA8; }
+  .card-stars{ margin-bottom:8px; }
+  .stars-interactive{ gap:2px; }
+  .star-btn{
+    background:none; border:none; font-size:24px; line-height:1; padding:2px; cursor:pointer;
+    color:#D8CDA8; transition: color .1s ease, transform .1s ease;
+  }
+  .star-btn:hover{ transform: scale(1.15); }
+  .star-btn.filled{ color: var(--mustard-deep); }
+  .star-btn:focus-visible{ outline:2px solid var(--ring); outline-offset:2px; border-radius:4px; }
+  .detail-rating{ margin: 4px 0 16px; }
+  .detail-rating-label{
+    font-family:'IBM Plex Mono',monospace; font-size:10.5px; text-transform:uppercase;
+    letter-spacing:.08em; color:#8C8262; margin-bottom:6px;
+  }
+
   /* Modal */
   .overlay{
     position:fixed; inset:0; background:rgba(15,18,14,.72); backdrop-filter: blur(2px);
@@ -353,6 +372,7 @@ const DEFAULT_TAGS = ["Förrätt","Huvudrätt","Efterrätt","Fisk","Kött","Vege
 let recipes = [];
 let allTags = []; // [{id, name}]
 let allUsers = []; // [{id, name}]
+let ratings = []; // [{id, recipe_id, user_id, rating}]
 let currentUser = null; // {id, name}
 let viewScope = 'all'; // 'all' | 'mine'
 let sortMode = 'recent'; // 'recent' | 'alpha'
@@ -401,6 +421,53 @@ async function loadTags(){
 async function loadUsers(){
   const { data, error } = await sb.from('users').select('*').order('name', { ascending:true });
   allUsers = error ? [] : (data || []);
+}
+
+async function loadRatings(){
+  const { data, error } = await sb.from('ratings').select('*');
+  ratings = error ? [] : (data || []);
+}
+
+function ratingStatsFor(recipeId){
+  const rs = ratings.filter(x => x.recipe_id === recipeId);
+  if(!rs.length) return { avg: 0, count: 0 };
+  const avg = rs.reduce((s,x) => s + x.rating, 0) / rs.length;
+  return { avg, count: rs.length };
+}
+
+function myRatingFor(recipeId){
+  if(!currentUser) return 0;
+  const mine = ratings.find(x => x.recipe_id === recipeId && x.user_id === currentUser.id);
+  return mine ? mine.rating : 0;
+}
+
+function starsMarkupReadonly(avg, count){
+  const rounded = Math.round(avg);
+  let glyphs = '';
+  for(let i=1;i<=5;i++) glyphs += i<=rounded ? '★' : '☆';
+  return `<div class="stars-row${count ? '' : ' stars-empty'}"><span class="stars-glyphs">${glyphs}</span>${count ? `<span class="stars-count">${avg.toFixed(1)} (${count})</span>` : ''}</div>`;
+}
+
+async function setMyRating(recipeId, value){
+  if(!currentUser) return;
+  const existing = ratings.find(x => x.recipe_id === recipeId && x.user_id === currentUser.id);
+  let error;
+  if(existing && existing.rating === value){
+    ({ error } = await sb.from('ratings').delete().eq('id', existing.id));
+  }else{
+    ({ error } = await sb.from('ratings').upsert({ recipe_id: recipeId, user_id: currentUser.id, rating: value }, { onConflict: 'recipe_id,user_id' }));
+  }
+  if(error){
+    const detailError = document.getElementById('detailError');
+    if(detailError){
+      detailError.textContent = 'Kunde inte spara betyg: ' + error.message;
+      detailError.style.display = '';
+    }
+    return;
+  }
+  await loadRatings();
+  renderGrid();
+  if(document.getElementById('ovDetail')) openDetail(recipeId);
 }
 
 function ownerName(id){
@@ -523,6 +590,7 @@ async function loadRecipes(){
   }
   recipes = data || [];
   await loadTags();
+  await loadRatings();
   renderTagBar();
   renderGrid();
 }
@@ -592,6 +660,7 @@ function renderGrid(){
   }
   list.forEach(r => {
     const imgs = imagesOf(r);
+    const stats = ratingStatsFor(r.id);
     const card = document.createElement('div');
     card.className = 'card';
     card.tabIndex = 0;
@@ -603,6 +672,7 @@ function renderGrid(){
       ${imgs[0] ? `<div style="position:relative;"><img class="card-thumb" src="${imgs[0]}" alt="">${imgs.length > 1 ? `<span class="tag-pill" style="position:absolute; bottom:6px; right:6px; background:#2A2620; color:#FBF6E9; border-color:#2A2620;">+${imgs.length - 1}</span>` : ''}</div>` : ''}
       <div class="card-name">${escapeHtml(r.name)}</div>
       <div class="card-owner">${escapeHtml(ownerName(r.owner_id))}s recept</div>
+      <div class="card-stars">${starsMarkupReadonly(stats.avg, stats.count)}</div>
       <div class="card-meta">${(r.tags||[]).map(t => `<span class="tag-pill">${escapeHtml(t)}</span>`).join('')}</div>
       <div class="card-snippet">${escapeHtml(snippetFor(r))}</div>
       <div class="card-source">${r.link ? '🔗 länk' : ''} ${imgs.length ? '🖼 bild' : ''} ${(!r.link && !imgs.length) ? '📝 anteckning' : ''}</div>
@@ -626,6 +696,8 @@ function openDetail(id){
   const r = recipes.find(x => x.id === id);
   if(!r) return;
   const isMine = r.owner_id === (currentUser && currentUser.id);
+  const stats = ratingStatsFor(r.id);
+  const myRating = myRatingFor(r.id);
   modalRoot.innerHTML = `
     <div class="overlay" id="ovDetail">
       <div class="modal">
@@ -633,6 +705,14 @@ function openDetail(id){
         <div class="detail-owner">${escapeHtml(ownerName(r.owner_id))}s recept</div>
         <h2>${escapeHtml(r.name)}</h2>
         <div class="detail-tags">${(r.tags||[]).map(t=>`<span class="tag-pill">${escapeHtml(t)}</span>`).join('')}</div>
+        <div class="detail-rating">
+          <div class="detail-rating-label">Snittbetyg</div>
+          ${starsMarkupReadonly(stats.avg, stats.count)}
+          <div class="detail-rating-label" style="margin-top:12px;">Ditt betyg</div>
+          <div class="stars-row stars-interactive" id="myStars">
+            ${[1,2,3,4,5].map(i => `<button type="button" class="star-btn${i<=myRating ? ' filled':''}" data-val="${i}" aria-label="${i} stjärnor">★</button>`).join('')}
+          </div>
+        </div>
         ${imagesOf(r).length ? `<div class="detail-gallery">${imagesOf(r).map((src,i) => `<img src="${src}" alt="" data-idx="${i}">`).join('')}</div>` : ''}
         ${r.link ? `<div><a class="detail-link" href="${r.link}" target="_blank" rel="noopener">${escapeHtml(r.link)}</a></div>` : ''}
         ${r.note ? `<div class="detail-text">${escapeHtml(r.note)}</div>` : ''}
@@ -649,6 +729,9 @@ function openDetail(id){
   `;
   document.getElementById('closeDetail').onclick = closeModal;
   document.getElementById('ovDetail').onclick = (e) => { if(e.target.id === 'ovDetail') closeModal(); };
+  modalRoot.querySelectorAll('#myStars .star-btn').forEach(btn => {
+    btn.onclick = () => setMyRating(r.id, Number(btn.dataset.val));
+  });
   const galleryImgs = imagesOf(r);
   modalRoot.querySelectorAll('.detail-gallery img').forEach(img => {
     img.onclick = () => openLightbox(galleryImgs, Number(img.dataset.idx));
@@ -844,7 +927,8 @@ document.getElementById('exportBtn').onclick = () => {
       exporterad: new Date().toISOString(),
       receptlador: allUsers,
       taggar: allTags,
-      recept: recipes
+      recept: recipes,
+      betyg: ratings
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
