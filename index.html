@@ -332,6 +332,7 @@
     <select class="search" id="sortSelect" style="flex:0 0 auto; min-width:150px; cursor:pointer;">
       <option value="recent">Senast tillagda</option>
       <option value="alpha">Bokstavsordning (A–Ö)</option>
+      <option value="rating">Högst betyg</option>
     </select>
     <div class="scope-toggle">
       <button class="scope-btn active" id="scopeAll" type="button">Alla recept</button>
@@ -375,7 +376,7 @@ let allUsers = []; // [{id, name}]
 let ratings = []; // [{id, recipe_id, user_id, rating}]
 let currentUser = null; // {id, name}
 let viewScope = 'all'; // 'all' | 'mine'
-let sortMode = 'recent'; // 'recent' | 'alpha'
+let sortMode = 'recent'; // 'recent' | 'alpha' | 'rating'
 let activeTagFilters = new Set();
 let searchTerm = "";
 
@@ -646,6 +647,7 @@ function getFilteredSortedList(){
 
   return list.slice().sort((a,b) => {
     if(sortMode === 'alpha') return a.name.localeCompare(b.name, 'sv');
+    if(sortMode === 'rating') return ratingStatsFor(b.id).avg - ratingStatsFor(a.id).avg || new Date(b.created_at) - new Date(a.created_at);
     return new Date(b.created_at) - new Date(a.created_at);
   });
 }
