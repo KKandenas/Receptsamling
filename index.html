@@ -267,6 +267,24 @@
   .addtagrow{ display:flex; gap:8px; margin-top:14px; }
   .addtagrow input{ flex:1; }
 
+  .explore-intro{ font-size:13.5px; color:var(--ink-soft); line-height:1.5; margin:0 0 16px; }
+  .explore-searchrow{ display:flex; gap:8px; margin-bottom:20px; }
+  .explore-searchrow input{ flex:1; }
+  .sitegroup-title{
+    font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.06em; text-transform:uppercase;
+    color:#9C947C; margin:18px 0 8px;
+  }
+  .sitegroup-title:first-of-type{ margin-top:0; }
+  .siterow{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:9px 0; border-bottom:1px solid #EDE4CC;
+  }
+  .sitemeta{ min-width:0; }
+  .sitename{ font-weight:700; color:var(--ink); text-decoration:none; }
+  .sitename:hover{ text-decoration:underline; }
+  .sitedesc{ font-size:12.5px; color:var(--ink-soft); margin-top:2px; }
+  .sitesearch-btn{ flex:0 0 auto; white-space:nowrap; }
+
   @media (prefers-reduced-motion: reduce){
     .card, .btn{ transition:none; }
   }
@@ -346,12 +364,14 @@
       <button class="scope-btn" id="scopeMine" type="button">Mina recept</button>
     </div>
     <button class="btn btn-ghost" id="manageTagsBtn">Hantera taggar</button>
+    <button class="btn btn-ghost" id="exploreBtn">Fler recept</button>
     <button class="btn btn-ghost" id="exportBtn">Exportera recept</button>
     <button class="btn btn-ghost" id="exportPdfBtn">Exportera som PDF</button>
     <button class="btn btn-primary" id="openAddBtn">+ Nytt recept</button>
   </div>
 
   <div class="tagbar" id="tagBar"></div>
+  <button class="btn btn-ghost" id="tagSearchOnlineBtn" style="display:none; margin:0 0 22px;">🔎 Sök förslag på nätet för valda taggar</button>
 
   <div class="grid" id="grid">
     <div class="loading">Läser in recept…</div>
@@ -377,6 +397,25 @@ window.addEventListener('unhandledrejection', (e) => {
 });
 
 const DEFAULT_TAGS = ["Förrätt","Huvudrätt","Efterrätt","Fisk","Kött","Vegetariskt","Bakning","Snabbmat"];
+
+const RECIPE_SITES = [
+  { group: 'Stora receptsajter', name: 'ICA Recept', domain: 'ica.se', url: 'https://www.ica.se/recept/', desc: 'En av Sveriges största receptdatabaser, med bra kategorier och näringsinformation.' },
+  { group: 'Stora receptsajter', name: 'Köket', domain: 'koket.se', url: 'https://www.koket.se/', desc: 'Recept från TV-kockar och matprogram, stor variation av vardagsmat och festmat.' },
+  { group: 'Stora receptsajter', name: 'Recept.se', domain: 'recept.se', url: 'https://recept.se/', desc: 'Stor samling provlagade recept samt recept från kända kockar.' },
+  { group: 'Stora receptsajter', name: 'Tasteline', domain: 'tasteline.com', url: 'https://www.tasteline.com/', desc: 'Professionellt redaktionellt innehåll med recept och vinmatchning.' },
+  { group: 'Stora receptsajter', name: 'Arla Köket', domain: 'arla.se', url: 'https://www.arla.se/recept/', desc: 'Mycket populär för vardagsmat, bakning och familjerecept.' },
+  { group: 'Community-baserade receptsajter', name: 'Matklubben', domain: 'matklubben.se', url: 'https://matklubben.se/', desc: 'Användargenererade recept, många äldre svenska husmansrecept.' },
+  { group: 'Community-baserade receptsajter', name: 'SvenskaRecept.se', domain: 'svenskarecept.se', url: 'https://svenskarecept.se/', desc: 'Fokus på svenska recept, bakning och husmanskost.' },
+  { group: 'Specialiserade sajter', name: 'Fredriks Fika', domain: 'fredriksfika.elle.se', url: 'https://fredriksfika.elle.se/', desc: 'En av Sveriges största bakbloggar.' },
+  { group: 'Specialiserade sajter', name: 'HelloFresh Recept', domain: 'hellofresh.se', url: 'https://www.hellofresh.se/recipes', desc: 'Många moderna och lättlagade recept.' },
+  { group: 'Specialiserade sajter', name: 'Allt om Mat', domain: 'alltommat.se', url: 'https://www.alltommat.se/', desc: 'Väldigt stort receptarkiv från Bonnier, en av de mest kända svenska matsajterna.' },
+];
+
+function siteSearchUrl(domain, query){
+  const q = (query || '').trim();
+  if(!q) return `https://${domain}`;
+  return `https://www.google.com/search?q=${encodeURIComponent('site:' + domain + ' ' + q)}`;
+}
 let recipes = [];
 let allTags = []; // [{id, name}]
 let allUsers = []; // [{id, name}]
@@ -621,6 +660,7 @@ function renderTagBar(){
     };
     tagBar.appendChild(b);
   });
+  document.getElementById('tagSearchOnlineBtn').style.display = activeTagFilters.size ? '' : 'none';
 }
 
 function matchesFilters(r){
@@ -714,6 +754,7 @@ function openDetail(id){
         <div class="detail-owner">${escapeHtml(ownerName(r.owner_id))}s recept</div>
         <h2>${escapeHtml(r.name)}</h2>
         <div class="detail-tags">${(r.tags||[]).map(t=>`<span class="tag-pill">${escapeHtml(t)}</span>`).join('')}</div>
+        <button class="btn btn-ghost" id="findSimilarBtn" type="button" style="margin-bottom:12px;">🔎 Sök liknande recept</button>
         <div class="detail-rating">
           <div class="detail-rating-label">Snittbetyg</div>
           ${starsMarkupReadonly(stats.avg, stats.count)}
@@ -738,6 +779,7 @@ function openDetail(id){
   `;
   document.getElementById('closeDetail').onclick = closeModal;
   document.getElementById('ovDetail').onclick = (e) => { if(e.target.id === 'ovDetail') closeModal(); };
+  document.getElementById('findSimilarBtn').onclick = () => openExplore(r.name);
   modalRoot.querySelectorAll('#myStars .star-btn').forEach(btn => {
     btn.onclick = () => setMyRating(r.id, Number(btn.dataset.val));
   });
@@ -927,6 +969,51 @@ function openTagManager(){
   };
 }
 document.getElementById('manageTagsBtn').onclick = openTagManager;
+
+function openExplore(prefillQuery){
+  const groups = [];
+  RECIPE_SITES.forEach(site => {
+    let g = groups.find(x => x.name === site.group);
+    if(!g){ g = { name: site.group, sites: [] }; groups.push(g); }
+    g.sites.push(site);
+  });
+
+  modalRoot.innerHTML = `
+    <div class="overlay" id="ovExplore">
+      <div class="modal">
+        <button class="modal-close" id="closeExplore" aria-label="Stäng">✕</button>
+        <h2>Fler recept</h2>
+        <p class="explore-intro">Bläddra bland populära svenska matsajter, eller sök efter något specifikt — sökningen öppnas hos respektive sajt i en ny flik.</p>
+        <div class="explore-searchrow">
+          <input type="text" id="exploreSearchInput" placeholder="Sök t.ex. på ingrediens eller rättens namn…" value="${escapeHtml(prefillQuery || '')}">
+        </div>
+        ${groups.map(g => `
+          <div class="sitegroup-title">${escapeHtml(g.name)}</div>
+          ${g.sites.map(site => `
+            <div class="siterow">
+              <div class="sitemeta">
+                <a class="sitename" href="${site.url}" target="_blank" rel="noopener">${escapeHtml(site.name)}</a>
+                <div class="sitedesc">${escapeHtml(site.desc)}</div>
+              </div>
+              <button class="btn btn-secondary sitesearch-btn" type="button" data-domain="${site.domain}">Sök</button>
+            </div>
+          `).join('')}
+        `).join('')}
+      </div>
+    </div>
+  `;
+  document.getElementById('closeExplore').onclick = closeModal;
+  document.getElementById('ovExplore').onclick = (e) => { if(e.target.id === 'ovExplore') closeModal(); };
+
+  const exploreSearchInput = document.getElementById('exploreSearchInput');
+  modalRoot.querySelectorAll('.sitesearch-btn').forEach(btn => {
+    btn.onclick = () => {
+      window.open(siteSearchUrl(btn.dataset.domain, exploreSearchInput.value), '_blank', 'noopener');
+    };
+  });
+}
+document.getElementById('exploreBtn').onclick = () => openExplore('');
+document.getElementById('tagSearchOnlineBtn').onclick = () => openExplore(Array.from(activeTagFilters).join(' '));
 
 document.getElementById('exportBtn').onclick = () => {
   const btn = document.getElementById('exportBtn');
