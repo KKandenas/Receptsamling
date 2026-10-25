@@ -1283,18 +1283,7 @@ function openForm(id){
     }
   }
 
-  async function fetchLinkPreview(url){
-    const proxies = [
-      'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
-      'https://corsproxy.io/?url=' + encodeURIComponent(url)
-    ];
-    let html = null;
-    let lastErr = null;
-    for(const p of proxies){
-      try{ html = await fetchViaProxy(p); if(html && html.length > 50) break; }
-      catch(e){ lastErr = e; }
-    }
-    if(!html) throw (lastErr || new Error('Ingen av mellanhands-tjänsterna svarade'));
+  function parseMetaFromHtml(html, baseUrl){
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const getMeta = (prop) => {
       const el = doc.querySelector(`meta[property="${prop}"]`) || doc.querySelector(`meta[name="${prop}"]`);
@@ -1303,9 +1292,45 @@ function openForm(id){
     let title = getMeta('og:title') || (doc.querySelector('title') ? doc.querySelector('title').textContent : null);
     let image = getMeta('og:image');
     if(image){
-      try{ image = new URL(image, url).href; }catch(e){ /* leave as-is */ }
+      try{ image = new URL(image, baseUrl).href; }catch(e){ /* leave as-is */ }
     }
     return { title: title ? title.trim() : null, image };
+  }
+
+  function parseMetaFromJinaText(text){
+    const m = text.match(/^Title:\s*(.+)$/m);
+    const title = m ? m[1].trim() : null;
+    const imgMatch = text.match(/!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/);
+    const image = imgMatch ? imgMatch[1] : null;
+    return { title, image };
+  }
+
+  async function fetchLinkPreview(url){
+    // Browsers block us from fetching other sites' HTML directly (CORS), so we go via
+    // free proxy services instead. They come and go, so we try a few in order and fall
+    // back to r.jina.ai (which also renders JS-built pages) if the plain HTML ones fail.
+    const htmlProxies = [
+      'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
+      'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url)
+    ];
+    let lastErr = null;
+    for(const p of htmlProxies){
+      try{
+        const html = await fetchViaProxy(p);
+        if(html && html.length > 50){
+          const info = parseMetaFromHtml(html, url);
+          if(info.title || info.image) return info;
+        }
+      }catch(e){ lastErr = e; }
+    }
+    try{
+      const text = await fetchViaProxy('https://r.jina.ai/' + url);
+      if(text && text.length > 50){
+        const info = parseMetaFromJinaText(text);
+        if(info.title || info.image) return info;
+      }
+    }catch(e){ lastErr = e; }
+    throw (lastErr || new Error('Ingen av mellanhands-tjänsterna svarade'));
   }
 
   document.getElementById('fetchLinkBtn').onclick = async () => {
