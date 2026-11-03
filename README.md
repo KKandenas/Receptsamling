@@ -16,7 +16,9 @@ Byggd som en enda fristående webbsida (`index.html`), värd gratis på GitHub P
 - **Zoombara bilder** – bra när receptet ligger inbakat i en bild (t.ex. ett foto av en kokbokssida).
 - **Egna taggar** – lägg till, byt namn på eller ta bort taggar/kategorier (förrätt, huvudrätt, fisk, kött, osv.) via "Hantera taggar".
 - **Betygsätt recept** – klicka på 1–5 stjärnor för att sätta ditt eget betyg. Varje person i receptlådan har sitt eget betyg, och kortet visar snittet av allas betyg.
-- **Sök, filtrera och sortera** – sök på namn, filtrera på taggar, sortera på senast tillagda eller bokstavsordning.
+- **Favoriter** – hjärtmarkera vems recept som helst och hitta dem snabbt igen under "Favoriter", utan att behöva kopiera dem till din egen låda.
+- **Ljust/mörkt läge** – växla tema med knappen uppe i hörnet, valet sparas i din webbläsare.
+- **Sök, filtrera och sortera** – sök på namn eller anteckningstext, filtrera på taggar, sortera på senast tillagda, bokstavsordning eller betyg.
 - **Export** – exportera allt som en JSON-backup, eller som en snygg utskriftsvänlig PDF (med klickbara länkar), som respekterar aktiva filter.
 
 ---
@@ -82,6 +84,17 @@ create table if not exists ratings (
 );
 alter table ratings enable row level security;
 create policy "allow all" on ratings for all using (true) with check (true);
+
+-- Favoriter
+create table if not exists favorites (
+  id uuid primary key default gen_random_uuid(),
+  recipe_id uuid not null references recipes(id) on delete cascade,
+  user_id uuid not null references users(id) on delete cascade,
+  created_at timestamptz default now(),
+  unique (recipe_id, user_id)
+);
+alter table favorites enable row level security;
+create policy "allow all" on favorites for all using (true) with check (true);
 
 -- Skapa en första receptlåda
 insert into users (name) values ('Irene') on conflict (name) do nothing;
