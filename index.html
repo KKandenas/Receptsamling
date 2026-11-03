@@ -241,6 +241,7 @@
     color:#6B5A2E; cursor:pointer;
   }
   .chip-select.active{ background:var(--mustard); border-color:var(--mustard); color:#251C0B; }
+  .chip-select.off{ background:transparent; border-color:#DFC7BE; color:#B3A290; text-decoration:line-through; }
   .customtag{ display:flex; gap:8px; margin-top:9px; }
   .customtag input{ flex:1; }
   .imgpick{
@@ -340,7 +341,11 @@
   .plan-day{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 0; border-bottom:1px solid #EDE4CC; }
   .plan-day-label{ font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink-soft); min-width:60px; }
   .plan-day-content{ display:flex; align-items:center; gap:10px; flex:1 1 auto; justify-content:flex-end; }
-  .plan-day-recipe{ font-weight:600; text-align:right; }
+  .plan-day-recipe{
+    font-weight:600; text-align:right; background:none; border:none; padding:0;
+    font-family:'Karla',sans-serif; font-size:14.5px; color:var(--ink); cursor:pointer;
+  }
+  .plan-day-recipe:hover{ text-decoration:underline; }
   .plan-day-remove{ background:none; border:none; color:var(--brick); font-size:15px; cursor:pointer; padding:2px 4px; flex:0 0 auto; }
   .picker-item{
     display:flex; justify-content:space-between; align-items:center; width:100%; text-align:left;
@@ -434,6 +439,7 @@
     <button class="btn btn-ghost" id="manageTagsBtn">Hantera taggar</button>
     <button class="btn btn-ghost" id="exploreBtn">Fler recept</button>
     <button class="btn btn-ghost" id="weekPlanBtn">Veckoplan</button>
+    <button class="btn btn-ghost" id="backfillBtn">Hämta ingredienser</button>
     <button class="btn btn-ghost" id="exportBtn">Exportera recept</button>
     <button class="btn btn-ghost" id="exportPdfBtn">Exportera som PDF</button>
     <button class="btn btn-primary" id="openAddBtn">+ Nytt recept</button>
@@ -633,6 +639,21 @@ async function setMyRating(recipeId, value){
 
 let mealPlan = []; // [{id, user_id, plan_date, recipe_id}] for currentUser
 let planWeekStart = mondayOf(new Date());
+let planExcludedTags = loadPlanExcludedTags();
+
+function loadPlanExcludedTags(){
+  try{
+    const raw = localStorage.getItem('receptladan_plan_excluded_tags');
+    return new Set(raw ? JSON.parse(raw) : []);
+  }catch(e){ return new Set(); }
+}
+function savePlanExcludedTags(){
+  try{ localStorage.setItem('receptladan_plan_excluded_tags', JSON.stringify(Array.from(planExcludedTags))); }catch(e){ /* ignore */ }
+}
+function isEligibleForPlan(recipe){
+  if(!planExcludedTags.size) return true;
+  return !(recipe.tags || []).some(t => planExcludedTags.has(t));
+}
 
 function mondayOf(date){
   const d = new Date(date);
@@ -709,7 +730,7 @@ async function randomizeWeek(){
     if(r) usedGroupsThisWeek.add(varietyGroupFor(r));
   });
 
-  const pool = shuffleArray(recipes.filter(r => !usedRecipeIds.has(r.id)));
+  const pool = shuffleArray(recipes.filter(r => !usedRecipeIds.has(r.id) && isEligibleForPlan(r)));
   const byGroup = {};
   pool.forEach(r => { const g = varietyGroupFor(r); (byGroup[g] = byGroup[g] || []).push(r); });
 
@@ -794,7 +815,9 @@ function renderPlanDays(){
       <div class="plan-day-label">${WEEKDAY_NAMES[i]} ${date.getDate()}/${date.getMonth() + 1}</div>
       <div class="plan-day-content">
         ${entry
-          ? `<span class="plan-day-recipe"${recipe ? '' : ' style="color:var(--ink-soft); font-weight:400;"'}>${escapeHtml(recipe ? recipe.name : '(borttaget recept)')}</span><button class="plan-day-remove" type="button" aria-label="Ta bort">✕</button>`
+          ? (recipe
+              ? `<button type="button" class="plan-day-recipe" data-id="${recipe.id}">${escapeHtml(recipe.name)}</button><button class="plan-day-remove" type="button" aria-label="Ta bort">✕</button>`
+              : `<span class="plan-day-recipe" style="color:var(--ink-soft); font-weight:400; cursor:default;">(borttaget recept)</span><button class="plan-day-remove" type="button" aria-label="Ta bort">✕</button>`)
           : `<button class="btn btn-secondary plan-day-pick" type="button">+ Välj recept</button>`
         }
       </div>
@@ -805,6 +828,10 @@ function renderPlanDays(){
         await setPlanDay(dateStr, recipeId);
         renderPlanDays();
       });
+    }
+    const recipeBtn = row.querySelector('button.plan-day-recipe');
+    if(recipeBtn){
+      recipeBtn.onclick = () => openDetail(recipeBtn.dataset.id);
     }
     const removeBtn = row.querySelector('.plan-day-remove');
     if(removeBtn){
@@ -827,6 +854,10 @@ async function openWeekPlan(){
           <button class="btn btn-ghost" id="planNextWeek" type="button">Nästa ›</button>
         </div>
         <div id="planDays"></div>
+        <div class="field" style="margin-top:16px;">
+          <label>Uteslut taggar från "Slumpa förslag" (klicka för att stänga av/på)</label>
+          <div class="chiprow" id="planTagFilterRow"></div>
+        </div>
         <div id="planError" style="display:none; color:#A8432B; font-size:13.5px; margin-top:10px; font-weight:600;"></div>
         <div class="modal-actions">
           <button class="btn btn-secondary" id="planRandomize" type="button">🎲 Slumpa förslag</button>
@@ -845,9 +876,28 @@ async function openWeekPlan(){
     await randomizeWeek();
     btn.disabled = false; btn.textContent = '🎲 Slumpa förslag';
   };
+  renderPlanTagFilter();
   renderPlanDays();
 }
 document.getElementById('weekPlanBtn').onclick = openWeekPlan;
+
+function renderPlanTagFilter(){
+  const row = document.getElementById('planTagFilterRow');
+  if(!row) return;
+  row.innerHTML = '';
+  allTagsInUse().forEach(tag => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip-select' + (planExcludedTags.has(tag) ? ' off' : '');
+    b.textContent = tag;
+    b.onclick = () => {
+      if(planExcludedTags.has(tag)) planExcludedTags.delete(tag); else planExcludedTags.add(tag);
+      savePlanExcludedTags();
+      renderPlanTagFilter();
+    };
+    row.appendChild(b);
+  });
+}
 
 function ownerName(id){
   const u = allUsers.find(x => x.id === id);
@@ -1513,6 +1563,147 @@ document.getElementById('exportPdfBtn').onclick = async () => {
   setTimeout(() => { btn.disabled = false; btn.textContent = originalText; }, 2200);
 };
 
+async function fetchViaProxy(proxyUrl){
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  try{
+    const res = await fetch(proxyUrl, { signal: controller.signal });
+    if(!res.ok) throw new Error('kod ' + res.status);
+    return await res.text();
+  }catch(e){
+    if(e.name === 'AbortError') throw new Error('tog för lång tid (timeout)');
+    throw e;
+  }finally{
+    clearTimeout(timeout);
+  }
+}
+
+function parseRecipeJsonLd(doc){
+  // Many recipe sites embed a schema.org Recipe block (for Google's rich-result
+  // snippets) with a real, structured ingredient list — free to read, no guessing.
+  const scripts = doc.querySelectorAll('script[type="application/ld+json"]');
+  for(const script of scripts){
+    let data;
+    try{ data = JSON.parse(script.textContent); }catch(e){ continue; }
+    const candidates = Array.isArray(data) ? data : (data['@graph'] || [data]);
+    for(const item of candidates){
+      if(!item || typeof item !== 'object') continue;
+      const type = item['@type'];
+      const isRecipe = type === 'Recipe' || (Array.isArray(type) && type.includes('Recipe'));
+      if(isRecipe && Array.isArray(item.recipeIngredient) && item.recipeIngredient.length){
+        return item.recipeIngredient.map(s => String(s).trim()).filter(Boolean);
+      }
+    }
+  }
+  return null;
+}
+
+function parseMetaFromHtml(html, baseUrl){
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const getMeta = (prop) => {
+    const el = doc.querySelector(`meta[property="${prop}"]`) || doc.querySelector(`meta[name="${prop}"]`);
+    return el ? el.getAttribute('content') : null;
+  };
+  let title = getMeta('og:title') || (doc.querySelector('title') ? doc.querySelector('title').textContent : null);
+  let image = getMeta('og:image');
+  if(image){
+    try{ image = new URL(image, baseUrl).href; }catch(e){ /* leave as-is */ }
+  }
+  const ingredients = parseRecipeJsonLd(doc);
+  return { title: title ? title.trim() : null, image, ingredients };
+}
+
+function parseMetaFromJinaText(text){
+  const m = text.match(/^Title:\s*(.+)$/m);
+  const title = m ? m[1].trim() : null;
+  const imgMatch = text.match(/!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/);
+  const image = imgMatch ? imgMatch[1] : null;
+  return { title, image };
+}
+
+async function fetchLinkPreview(url){
+  // Browsers block us from fetching other sites' HTML directly (CORS), so we go via
+  // free proxy services instead. They come and go, so we try a few in order and fall
+  // back to r.jina.ai (which also renders JS-built pages) if the plain HTML ones fail.
+  const htmlProxies = [
+    'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
+    'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url)
+  ];
+  let lastErr = null;
+  for(const p of htmlProxies){
+    try{
+      const html = await fetchViaProxy(p);
+      if(html && html.length > 50){
+        const info = parseMetaFromHtml(html, url);
+        if(info.title || info.image || (info.ingredients && info.ingredients.length)) return info;
+      }
+    }catch(e){ lastErr = e; }
+  }
+  try{
+    const text = await fetchViaProxy('https://r.jina.ai/' + url);
+    if(text && text.length > 50){
+      const info = parseMetaFromJinaText(text);
+      if(info.title || info.image) return info;
+    }
+  }catch(e){ lastErr = e; }
+  throw (lastErr || new Error('Ingen av mellanhands-tjänsterna svarade'));
+}
+
+function openBackfillIngredients(){
+  const candidates = recipes.filter(r =>
+    r.owner_id === (currentUser && currentUser.id) && r.link && !(r.ingredients && r.ingredients.length)
+  );
+  modalRoot.innerHTML = `
+    <div class="overlay" id="ovBackfill">
+      <div class="modal">
+        <button class="modal-close" id="closeBackfill" aria-label="Stäng">✕</button>
+        <h2>Hämta ingredienser</h2>
+        <p class="explore-intro">Går igenom dina recept som har en länk men saknar en sparad ingredienslista, och försöker hämta in den automatiskt (samma teknik som "Hämta info" när man sparar ett nytt recept). Fungerar bara för sajter som har strukturerad receptdata inbäddad — resten lämnas orörda.</p>
+        ${candidates.length === 0
+          ? `<p style="color:var(--ink-soft); font-size:14px;">Inga av dina recept behöver kontrolleras just nu — alla med länk har redan antingen ingredienser sparade, eller ingen länk alls.</p>`
+          : `<div id="backfillList"></div>
+             <div class="modal-actions">
+               <span></span>
+               <button class="btn btn-primary" id="backfillStart" type="button">Hämta för ${candidates.length} recept</button>
+             </div>`
+        }
+      </div>
+    </div>
+  `;
+  document.getElementById('closeBackfill').onclick = closeModal;
+  document.getElementById('ovBackfill').onclick = (e) => { if(e.target.id === 'ovBackfill') closeModal(); };
+  if(!candidates.length) return;
+
+  const list = document.getElementById('backfillList');
+  list.innerHTML = candidates.map(r => `<div class="plan-day" data-id="${r.id}"><div>${escapeHtml(r.name)}</div><div class="backfill-status" style="font-size:12.5px; color:var(--ink-soft);">Väntar…</div></div>`).join('');
+
+  document.getElementById('backfillStart').onclick = async () => {
+    const startBtn = document.getElementById('backfillStart');
+    startBtn.disabled = true;
+    let found = 0;
+    for(const r of candidates){
+      const row = list.querySelector(`[data-id="${r.id}"] .backfill-status`);
+      startBtn.textContent = `Hämtar… (${candidates.indexOf(r) + 1} av ${candidates.length})`;
+      if(row) row.textContent = 'Hämtar…';
+      try{
+        const info = await fetchLinkPreview(r.link);
+        if(info.ingredients && info.ingredients.length){
+          const { error } = await sb.from('recipes').update({ ingredients: info.ingredients }).eq('id', r.id);
+          if(error){ if(row) row.textContent = 'Kunde inte spara: ' + error.message; }
+          else{ found++; if(row) row.textContent = `✓ Hittade ${info.ingredients.length} ingredienser`; }
+        }else{
+          if(row) row.textContent = 'Hittade ingen ingredienslista på sidan';
+        }
+      }catch(e){
+        if(row) row.textContent = 'Kunde inte hämta sidan (' + (e.message || 'okänt fel') + ')';
+      }
+    }
+    startBtn.textContent = `Klart — hittade ingredienser för ${found} av ${candidates.length}`;
+    await loadRecipes();
+  };
+}
+document.getElementById('backfillBtn').onclick = openBackfillIngredients;
+
 function openForm(id){
   const existing = id ? recipes.find(r => r.id === id) : null;
   const chosenTags = new Set(existing ? existing.tags : []);
@@ -1616,92 +1807,6 @@ function openForm(id){
     });
   }
   renderThumbs();
-
-  async function fetchViaProxy(proxyUrl){
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
-    try{
-      const res = await fetch(proxyUrl, { signal: controller.signal });
-      if(!res.ok) throw new Error('kod ' + res.status);
-      return await res.text();
-    }catch(e){
-      if(e.name === 'AbortError') throw new Error('tog för lång tid (timeout)');
-      throw e;
-    }finally{
-      clearTimeout(timeout);
-    }
-  }
-
-  function parseRecipeJsonLd(doc){
-    // Many recipe sites embed a schema.org Recipe block (for Google's rich-result
-    // snippets) with a real, structured ingredient list — free to read, no guessing.
-    const scripts = doc.querySelectorAll('script[type="application/ld+json"]');
-    for(const script of scripts){
-      let data;
-      try{ data = JSON.parse(script.textContent); }catch(e){ continue; }
-      const candidates = Array.isArray(data) ? data : (data['@graph'] || [data]);
-      for(const item of candidates){
-        if(!item || typeof item !== 'object') continue;
-        const type = item['@type'];
-        const isRecipe = type === 'Recipe' || (Array.isArray(type) && type.includes('Recipe'));
-        if(isRecipe && Array.isArray(item.recipeIngredient) && item.recipeIngredient.length){
-          return item.recipeIngredient.map(s => String(s).trim()).filter(Boolean);
-        }
-      }
-    }
-    return null;
-  }
-
-  function parseMetaFromHtml(html, baseUrl){
-    const doc = new DOMParser().parseFromString(html, 'text/html');
-    const getMeta = (prop) => {
-      const el = doc.querySelector(`meta[property="${prop}"]`) || doc.querySelector(`meta[name="${prop}"]`);
-      return el ? el.getAttribute('content') : null;
-    };
-    let title = getMeta('og:title') || (doc.querySelector('title') ? doc.querySelector('title').textContent : null);
-    let image = getMeta('og:image');
-    if(image){
-      try{ image = new URL(image, baseUrl).href; }catch(e){ /* leave as-is */ }
-    }
-    const ingredients = parseRecipeJsonLd(doc);
-    return { title: title ? title.trim() : null, image, ingredients };
-  }
-
-  function parseMetaFromJinaText(text){
-    const m = text.match(/^Title:\s*(.+)$/m);
-    const title = m ? m[1].trim() : null;
-    const imgMatch = text.match(/!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/);
-    const image = imgMatch ? imgMatch[1] : null;
-    return { title, image };
-  }
-
-  async function fetchLinkPreview(url){
-    // Browsers block us from fetching other sites' HTML directly (CORS), so we go via
-    // free proxy services instead. They come and go, so we try a few in order and fall
-    // back to r.jina.ai (which also renders JS-built pages) if the plain HTML ones fail.
-    const htmlProxies = [
-      'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
-      'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url)
-    ];
-    let lastErr = null;
-    for(const p of htmlProxies){
-      try{
-        const html = await fetchViaProxy(p);
-        if(html && html.length > 50){
-          const info = parseMetaFromHtml(html, url);
-          if(info.title || info.image || (info.ingredients && info.ingredients.length)) return info;
-        }
-      }catch(e){ lastErr = e; }
-    }
-    try{
-      const text = await fetchViaProxy('https://r.jina.ai/' + url);
-      if(text && text.length > 50){
-        const info = parseMetaFromJinaText(text);
-        if(info.title || info.image) return info;
-      }
-    }catch(e){ lastErr = e; }
-    throw (lastErr || new Error('Ingen av mellanhands-tjänsterna svarade'));
-  }
 
   document.getElementById('fetchLinkBtn').onclick = async () => {
     const linkInput = document.getElementById('fLink');
