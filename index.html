@@ -1623,30 +1623,32 @@ function parseMetaFromJinaText(text){
 
 async function fetchLinkPreview(url){
   // Browsers block us from fetching other sites' HTML directly (CORS), so we go via
-  // free proxy services instead. They come and go, so we try a few in order and fall
-  // back to r.jina.ai (which also renders JS-built pages) if the plain HTML ones fail.
+  // free proxy services instead. They come and go (and are sometimes just slow), so we
+  // race a few of them in parallel and use whichever answers first with something
+  // useful, instead of waiting out a dead/slow one before trying the next.
   const htmlProxies = [
     'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
     'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url)
   ];
-  let lastErr = null;
-  for(const p of htmlProxies){
-    try{
-      const html = await fetchViaProxy(p);
-      if(html && html.length > 50){
-        const info = parseMetaFromHtml(html, url);
-        if(info.title || info.image || (info.ingredients && info.ingredients.length)) return info;
-      }
-    }catch(e){ lastErr = e; }
-  }
+  const attempts = htmlProxies.map(p => fetchViaProxy(p).then(html => {
+    if(!html || html.length <= 50) throw new Error('tomt svar');
+    const info = parseMetaFromHtml(html, url);
+    if(!(info.title || info.image || (info.ingredients && info.ingredients.length))) throw new Error('inget användbart hittades');
+    return info;
+  }));
   try{
-    const text = await fetchViaProxy('https://r.jina.ai/' + url);
-    if(text && text.length > 50){
-      const info = parseMetaFromJinaText(text);
-      if(info.title || info.image) return info;
-    }
-  }catch(e){ lastErr = e; }
-  throw (lastErr || new Error('Ingen av mellanhands-tjänsterna svarade'));
+    return await Promise.any(attempts);
+  }catch(aggregateErr){
+    try{
+      const text = await fetchViaProxy('https://r.jina.ai/' + url);
+      if(text && text.length > 50){
+        const info = parseMetaFromJinaText(text);
+        if(info.title || info.image) return info;
+      }
+    }catch(e){ /* fall through to the error below */ }
+    const firstErr = aggregateErr.errors && aggregateErr.errors[0];
+    throw (firstErr || new Error('Ingen av mellanhands-tjänsterna svarade'));
+  }
 }
 
 function openBackfillIngredients(){
@@ -1696,6 +1698,9 @@ function openBackfillIngredients(){
         }
       }catch(e){
         if(row) row.textContent = 'Kunde inte hämta sidan (' + (e.message || 'okänt fel') + ')';
+      }
+      if(candidates.indexOf(r) < candidates.length - 1){
+        await new Promise(resolve => setTimeout(resolve, 400)); // liten paus, schonar de gratis proxytjänsterna
       }
     }
     startBtn.textContent = `Klart — hittade ingredienser för ${found} av ${candidates.length}`;
