@@ -123,7 +123,34 @@
   .btn-danger{ background:transparent; color:#E7A891; border:1px solid #5A342A; }
   .btn-danger:hover{ background:#3A241E; }
 
-  .tagbar{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:26px; }
+  .tagbar{ display:flex; flex-wrap:wrap; gap:8px; max-width:280px; }
+
+  .dropdown-wrap{ position:relative; display:inline-block; }
+  .dropdown-panel{
+    position:absolute; top:calc(100% + 6px); left:0; z-index:40;
+    background:var(--card); color:var(--ink); border:1px solid var(--card-edge); border-radius:8px;
+    box-shadow:0 14px 30px rgba(0,0,0,.28); padding:8px; min-width:210px;
+    display:none;
+  }
+  .dropdown-panel.open{ display:block; }
+  .dropdown-item{
+    display:block; width:100%; text-align:left; background:none; border:none; border-radius:6px;
+    padding:9px 10px; font-family:'Karla',sans-serif; font-size:14px; color:var(--ink); cursor:pointer;
+  }
+  .dropdown-item:hover{ background:#F6F0DD; }
+
+  .tagfilter-row{ display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:26px; }
+  .tagfilter-count{
+    display:inline-flex; align-items:center; justify-content:center; min-width:17px; height:17px;
+    margin-left:6px; border-radius:50%; background:var(--mustard); color:#251C0B;
+    font-family:'IBM Plex Mono',monospace; font-size:10.5px; padding:0 4px;
+  }
+  .active-tag-pills{ display:flex; flex-wrap:wrap; gap:7px; }
+  .active-tag-pill{
+    display:inline-flex; align-items:center; gap:6px;
+    font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:.03em; text-transform:uppercase;
+    padding:5px 6px 5px 11px; border-radius:20px; background:var(--mustard); color:#251C0B; border:none; cursor:pointer;
+  }
   .chip{
     font-family:'IBM Plex Mono', monospace; font-size:11.5px; letter-spacing:.03em;
     padding:6px 11px; border-radius:20px; border:1px solid var(--line); color:var(--label-muted);
@@ -436,17 +463,30 @@
       <button class="scope-btn" id="scopeMine" type="button">Mina recept</button>
       <button class="scope-btn" id="scopeFavorites" type="button">Favoriter</button>
     </div>
-    <button class="btn btn-ghost" id="manageTagsBtn">Hantera taggar</button>
-    <button class="btn btn-ghost" id="exploreBtn">Fler recept</button>
     <button class="btn btn-ghost" id="weekPlanBtn">Veckoplan</button>
-    <button class="btn btn-ghost" id="backfillBtn">Hämta ingredienser</button>
-    <button class="btn btn-ghost" id="exportBtn">Exportera recept</button>
-    <button class="btn btn-ghost" id="exportPdfBtn">Exportera som PDF</button>
+    <div class="dropdown-wrap">
+      <button class="btn btn-ghost" id="moreMenuBtn" type="button" aria-haspopup="true" aria-expanded="false">⚙ Mer</button>
+      <div class="dropdown-panel" id="moreMenuPanel">
+        <button class="dropdown-item" id="manageTagsBtn" type="button">Hantera taggar</button>
+        <button class="dropdown-item" id="exploreBtn" type="button">Fler recept</button>
+        <button class="dropdown-item" id="backfillBtn" type="button">Hämta ingredienser</button>
+        <button class="dropdown-item" id="exportBtn" type="button">Exportera recept</button>
+        <button class="dropdown-item" id="exportPdfBtn" type="button">Exportera som PDF</button>
+      </div>
+    </div>
     <button class="btn btn-primary" id="openAddBtn">+ Nytt recept</button>
   </div>
 
-  <div class="tagbar" id="tagBar"></div>
-  <button class="btn btn-ghost" id="tagSearchOnlineBtn" style="display:none; margin:0 0 22px;">🔎 Sök förslag på nätet för valda taggar</button>
+  <div class="tagfilter-row">
+    <div class="dropdown-wrap">
+      <button class="btn btn-ghost" id="tagFilterBtn" type="button" aria-haspopup="true" aria-expanded="false">🏷 Taggar<span class="tagfilter-count" id="tagFilterCount" style="display:none;"></span></button>
+      <div class="dropdown-panel" id="tagFilterPanel">
+        <div class="tagbar" id="tagBar" style="margin-bottom:0;"></div>
+      </div>
+    </div>
+    <div class="active-tag-pills" id="activeTagPills"></div>
+    <button class="btn btn-ghost" id="tagSearchOnlineBtn" type="button" style="display:none;">🔎 Sök förslag på nätet för valda taggar</button>
+  </div>
 
   <div class="grid" id="grid">
     <div class="loading">Läser in recept…</div>
@@ -1045,6 +1085,23 @@ function renderTagBar(){
     };
     tagBar.appendChild(b);
   });
+
+  const countEl = document.getElementById('tagFilterCount');
+  countEl.textContent = activeTagFilters.size || '';
+  countEl.style.display = activeTagFilters.size ? '' : 'none';
+
+  const pills = document.getElementById('activeTagPills');
+  pills.innerHTML = '';
+  activeTagFilters.forEach(tag => {
+    const p = document.createElement('button');
+    p.type = 'button';
+    p.className = 'active-tag-pill';
+    p.innerHTML = `${escapeHtml(tag)} <span aria-hidden="true">✕</span>`;
+    p.setAttribute('aria-label', `Ta bort taggfilter ${tag}`);
+    p.onclick = () => { activeTagFilters.delete(tag); renderTagBar(); renderGrid(); };
+    pills.appendChild(p);
+  });
+
   document.getElementById('tagSearchOnlineBtn').style.display = activeTagFilters.size ? '' : 'none';
 }
 
@@ -1132,6 +1189,29 @@ searchInput.addEventListener('input', (e) => { searchTerm = e.target.value; rend
 document.getElementById('sortSelect').addEventListener('change', (e) => { sortMode = e.target.value; renderGrid(); });
 
 document.getElementById('openAddBtn').onclick = () => openForm(null);
+
+function setupDropdown(btnId, panelId, { closeOnItemClick } = {}){
+  const btn = document.getElementById(btnId);
+  const panel = document.getElementById(panelId);
+  function close(){
+    panel.classList.remove('open');
+    btn.setAttribute('aria-expanded', 'false');
+  }
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    const isOpen = panel.classList.toggle('open');
+    btn.setAttribute('aria-expanded', String(isOpen));
+  };
+  panel.onclick = (e) => { e.stopPropagation(); };
+  if(closeOnItemClick){
+    panel.querySelectorAll('.dropdown-item').forEach(item => item.addEventListener('click', close));
+  }
+  return close;
+}
+const closeMoreMenu = setupDropdown('moreMenuBtn', 'moreMenuPanel', { closeOnItemClick: true });
+const closeTagFilter = setupDropdown('tagFilterBtn', 'tagFilterPanel');
+document.addEventListener('click', () => { closeMoreMenu(); closeTagFilter(); });
+document.addEventListener('keydown', (e) => { if(e.key === 'Escape'){ closeMoreMenu(); closeTagFilter(); } });
 
 function openDetail(id){
   const r = recipes.find(x => x.id === id);
