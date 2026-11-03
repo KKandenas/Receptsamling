@@ -1723,9 +1723,15 @@ function openBackfillIngredients(){
       try{
         const info = await fetchLinkPreview(r.link);
         if(info.ingredients && info.ingredients.length){
-          const { error } = await sb.from('recipes').update({ ingredients: info.ingredients }).eq('id', r.id);
+          // Select the row back after saving, so we report what Postgres actually
+          // stored — not just that the request didn't error out.
+          const { data: saved, error } = await sb.from('recipes').update({ ingredients: info.ingredients }).eq('id', r.id).select();
           if(error){ if(row) row.textContent = 'Kunde inte spara: ' + error.message; }
-          else{ found++; if(row) row.textContent = `✓ Hittade ${info.ingredients.length} ingredienser`; }
+          else if(!saved || !saved.length || !(saved[0].ingredients && saved[0].ingredients.length)){
+            if(row) row.textContent = 'Sparades inte som väntat — testa gärna igen';
+          }else{
+            found++; if(row) row.textContent = `✓ Hittade ${saved[0].ingredients.length} ingredienser`;
+          }
         }else{
           if(row) row.textContent = 'Hittade ingen ingredienslista på sidan';
         }
@@ -1736,7 +1742,9 @@ function openBackfillIngredients(){
         await new Promise(resolve => setTimeout(resolve, 400)); // liten paus, schonar de gratis proxytjänsterna
       }
     }
-    startBtn.textContent = `Klart — hittade ingredienser för ${found} av ${candidates.length}`;
+    startBtn.textContent = `Klart — hittade ingredienser för ${found} av ${candidates.length}. Klicka för att stänga.`;
+    startBtn.disabled = false;
+    startBtn.onclick = closeModal;
     await loadRecipes();
   };
 }
