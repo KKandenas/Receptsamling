@@ -409,13 +409,6 @@
     background:var(--panel-bg); border:1px solid var(--panel-border); border-radius:6px; color:var(--panel-text);
     font-family:'Karla',sans-serif; font-size:13px; padding:5px 9px; width:160px;
   }
-  .scope-toggle{ display:flex; gap:6px; }
-  .scope-btn{
-    font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:.03em; text-transform:uppercase;
-    padding:9px 13px; border-radius:8px; border:1px solid var(--line); color:var(--label-muted);
-    background:transparent; cursor:pointer;
-  }
-  .scope-btn.active{ background:var(--mustard); border-color:var(--mustard); color:#251C0B; }
   .card-owner{
     font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:.05em; text-transform:uppercase;
     color:#9C947C; margin-top:4px;
@@ -458,11 +451,11 @@
       <option value="alpha">Bokstavsordning (A–Ö)</option>
       <option value="rating">Högst betyg</option>
     </select>
-    <div class="scope-toggle">
-      <button class="scope-btn active" id="scopeAll" type="button">Alla recept</button>
-      <button class="scope-btn" id="scopeMine" type="button">Mina recept</button>
-      <button class="scope-btn" id="scopeFavorites" type="button">Favoriter</button>
-    </div>
+    <select class="search" id="scopeSelect" style="flex:0 0 auto; min-width:150px; cursor:pointer;">
+      <option value="all">Alla recept</option>
+      <option value="mine">Mina recept</option>
+      <option value="favorites">Favoriter</option>
+    </select>
     <button class="btn btn-ghost" id="weekPlanBtn">Veckoplan</button>
     <div class="dropdown-wrap">
       <button class="btn btn-ghost" id="moreMenuBtn" type="button" aria-haspopup="true" aria-expanded="false">⚙ Mer</button>
@@ -1026,16 +1019,10 @@ document.getElementById('createUserBtn').onclick = async () => {
   await selectUser(data[0]);
 };
 
-document.getElementById('scopeAll').onclick = () => setScope('all');
-document.getElementById('scopeMine').onclick = () => setScope('mine');
-document.getElementById('scopeFavorites').onclick = () => setScope('favorites');
-function setScope(scope){
-  viewScope = scope;
-  document.getElementById('scopeAll').classList.toggle('active', scope === 'all');
-  document.getElementById('scopeMine').classList.toggle('active', scope === 'mine');
-  document.getElementById('scopeFavorites').classList.toggle('active', scope === 'favorites');
+document.getElementById('scopeSelect').addEventListener('change', (e) => {
+  viewScope = e.target.value;
   renderGrid();
-}
+});
 
 async function boot(){
   await loadUsers();
