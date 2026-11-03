@@ -269,6 +269,8 @@
   .detail-link{ color:var(--mustard-deep); font-weight:700; text-decoration:none; word-break:break-all; }
   .detail-link:hover{ text-decoration:underline; }
   .detail-text{ white-space:pre-wrap; line-height:1.6; font-size:14.5px; color:#3A362C; margin-top:6px; }
+  .detail-ingredients{ margin:6px 0 0; padding-left:20px; font-size:14.5px; line-height:1.6; color:#3A362C; }
+  .detail-ingredients li{ margin-bottom:2px; }
   .detail-date{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#9C947C; margin-top:18px; }
 
   .loading{ grid-column: 1/-1; text-align:center; padding:60px 10px; color:var(--whoami-text); font-family:'Karla',sans-serif; }
@@ -332,6 +334,21 @@
   .sitename:hover{ text-decoration:underline; }
   .sitedesc{ font-size:12.5px; color:var(--ink-soft); margin-top:2px; }
   .sitesearch-btn{ flex:0 0 auto; white-space:nowrap; }
+
+  .plan-nav{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin:14px 0 18px; }
+  .plan-range{ font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.04em; }
+  .plan-day{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 0; border-bottom:1px solid #EDE4CC; }
+  .plan-day-label{ font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink-soft); min-width:60px; }
+  .plan-day-content{ display:flex; align-items:center; gap:10px; flex:1 1 auto; justify-content:flex-end; }
+  .plan-day-recipe{ font-weight:600; text-align:right; }
+  .plan-day-remove{ background:none; border:none; color:var(--brick); font-size:15px; cursor:pointer; padding:2px 4px; flex:0 0 auto; }
+  .picker-item{
+    display:flex; justify-content:space-between; align-items:center; width:100%; text-align:left;
+    background:none; border:none; border-bottom:1px solid #EDE4CC; padding:9px 4px; cursor:pointer;
+    font-family:'Karla',sans-serif; font-size:14px; color:var(--ink);
+  }
+  .picker-item:hover{ background:#F6F0DD; }
+  .picker-item-owner{ font-family:'IBM Plex Mono',monospace; font-size:10px; color:#9C947C; text-transform:uppercase; }
 
   @media (prefers-reduced-motion: reduce){
     .card, .btn{ transition:none; }
@@ -416,6 +433,7 @@
     </div>
     <button class="btn btn-ghost" id="manageTagsBtn">Hantera taggar</button>
     <button class="btn btn-ghost" id="exploreBtn">Fler recept</button>
+    <button class="btn btn-ghost" id="weekPlanBtn">Veckoplan</button>
     <button class="btn btn-ghost" id="exportBtn">Exportera recept</button>
     <button class="btn btn-ghost" id="exportPdfBtn">Exportera som PDF</button>
     <button class="btn btn-primary" id="openAddBtn">+ Nytt recept</button>
@@ -613,6 +631,224 @@ async function setMyRating(recipeId, value){
   if(document.getElementById('ovDetail')) openDetail(recipeId);
 }
 
+let mealPlan = []; // [{id, user_id, plan_date, recipe_id}] for currentUser
+let planWeekStart = mondayOf(new Date());
+
+function mondayOf(date){
+  const d = new Date(date);
+  d.setHours(0,0,0,0);
+  const day = d.getDay(); // 0=sön..6=lör
+  d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
+  return d;
+}
+function addDays(date, n){
+  const d = new Date(date);
+  d.setDate(d.getDate() + n);
+  return d;
+}
+function isoDate(date){
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+function shuffleArray(arr){
+  for(let i = arr.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+async function loadMealPlan(){
+  if(!currentUser){ mealPlan = []; return; }
+  const { data, error } = await sb.from('meal_plan').select('*').eq('user_id', currentUser.id);
+  mealPlan = error ? [] : (data || []);
+}
+
+async function setPlanDay(dateStr, recipeId){
+  const existing = mealPlan.find(p => p.plan_date === dateStr);
+  let error;
+  if(existing){
+    ({ error } = await sb.from('meal_plan').update({ recipe_id: recipeId }).eq('id', existing.id));
+  }else{
+    ({ error } = await sb.from('meal_plan').insert([{ user_id: currentUser.id, plan_date: dateStr, recipe_id: recipeId }]));
+  }
+  if(error) return;
+  await loadMealPlan();
+}
+
+async function clearPlanDay(dateStr){
+  const existing = mealPlan.find(p => p.plan_date === dateStr);
+  if(!existing) return;
+  const { error } = await sb.from('meal_plan').delete().eq('id', existing.id);
+  if(error) return;
+  await loadMealPlan();
+}
+
+// Opportunistic variation for "Slumpa förslag": if a recipe happens to carry one of
+// these tags we use it to avoid repeating the same protein within a week. Recipes
+// without any of these tags just land in a shared "_other" bucket — no forced taxonomy.
+const VARIETY_TAG_CANDIDATES = ['fisk','skaldjur','kött','kyckling','fågel','vegetariskt','vegansk','fläsk','lamm','nöt','korv'];
+function varietyGroupFor(recipe){
+  const tags = (recipe.tags || []).map(t => t.toLowerCase());
+  return VARIETY_TAG_CANDIDATES.find(cand => tags.includes(cand)) || '_other';
+}
+
+async function randomizeWeek(){
+  const weekDates = Array.from({ length: 7 }, (_, i) => isoDate(addDays(planWeekStart, i)));
+  const emptyDates = weekDates.filter(d => !mealPlan.some(p => p.plan_date === d));
+  const planError = document.getElementById('planError');
+  if(!emptyDates.length) return;
+
+  const usedGroupsThisWeek = new Set();
+  const usedRecipeIds = new Set(mealPlan.map(p => p.recipe_id));
+  weekDates.forEach(d => {
+    const entry = mealPlan.find(p => p.plan_date === d);
+    const r = entry && recipes.find(x => x.id === entry.recipe_id);
+    if(r) usedGroupsThisWeek.add(varietyGroupFor(r));
+  });
+
+  const pool = shuffleArray(recipes.filter(r => !usedRecipeIds.has(r.id)));
+  const byGroup = {};
+  pool.forEach(r => { const g = varietyGroupFor(r); (byGroup[g] = byGroup[g] || []).push(r); });
+
+  const newRows = [];
+  for(const dateStr of emptyDates){
+    const availableGroups = Object.keys(byGroup).filter(g => byGroup[g].length && !usedGroupsThisWeek.has(g));
+    const chosenGroup = availableGroups[0] || Object.keys(byGroup).find(g => byGroup[g].length);
+    if(!chosenGroup) break;
+    const recipe = byGroup[chosenGroup].shift();
+    usedGroupsThisWeek.add(chosenGroup);
+    newRows.push({ user_id: currentUser.id, plan_date: dateStr, recipe_id: recipe.id });
+  }
+
+  if(!newRows.length){
+    if(planError){ planError.textContent = 'Inga fler recept att föreslå.'; planError.style.display = ''; }
+    return;
+  }
+  const { error } = await sb.from('meal_plan').insert(newRows);
+  if(error){
+    if(planError){ planError.textContent = 'Kunde inte spara förslag: ' + error.message; planError.style.display = ''; }
+    return;
+  }
+  if(newRows.length < emptyDates.length && planError){
+    planError.textContent = 'Slut på recept att föreslå — fyllde i vad jag kunde.';
+    planError.style.display = '';
+  }
+  await loadMealPlan();
+  renderPlanDays();
+}
+
+function openRecipePicker(onSelect){
+  const box = document.createElement('div');
+  box.className = 'overlay';
+  box.style.zIndex = '150';
+  box.innerHTML = `
+    <div class="modal" style="max-width:420px;">
+      <button class="modal-close" id="closePicker" aria-label="Stäng">✕</button>
+      <h2 style="font-size:20px;">Välj recept</h2>
+      <input type="text" class="search" id="pickerSearch" placeholder="Sök recept…" style="width:100%; margin-bottom:12px; color:var(--ink); background:#FFFDF6; border:1px solid #DED2AC;">
+      <div id="pickerList" style="max-height:320px; overflow-y:auto;"></div>
+    </div>
+  `;
+  document.body.appendChild(box);
+  const searchInput = box.querySelector('#pickerSearch');
+  const list = box.querySelector('#pickerList');
+  function renderList(){
+    const term = searchInput.value.trim().toLowerCase();
+    const matches = recipes.filter(r => !term || r.name.toLowerCase().includes(term)).slice(0, 50);
+    list.innerHTML = matches.length
+      ? matches.map(r => `<button type="button" class="picker-item" data-id="${r.id}">${escapeHtml(r.name)}<span class="picker-item-owner">${escapeHtml(ownerName(r.owner_id))}</span></button>`).join('')
+      : `<div style="padding:14px; color:var(--ink-soft); font-size:13.5px;">Inga träffar.</div>`;
+    list.querySelectorAll('.picker-item').forEach(btn => {
+      btn.onclick = () => { box.remove(); onSelect(btn.dataset.id); };
+    });
+  }
+  renderList();
+  searchInput.addEventListener('input', renderList);
+  searchInput.focus();
+  box.querySelector('#closePicker').onclick = () => box.remove();
+  box.onclick = (e) => { if(e.target === box) box.remove(); };
+}
+
+const WEEKDAY_NAMES = ['Mån','Tis','Ons','Tor','Fre','Lör','Sön'];
+
+function renderPlanDays(){
+  const planError = document.getElementById('planError');
+  if(planError) planError.style.display = 'none';
+  const weekEnd = addDays(planWeekStart, 6);
+  document.getElementById('planRangeLabel').textContent =
+    `${planWeekStart.toLocaleDateString('sv-SE', { day:'numeric', month:'short' })} – ${weekEnd.toLocaleDateString('sv-SE', { day:'numeric', month:'short', year:'numeric' })}`;
+
+  const daysEl = document.getElementById('planDays');
+  daysEl.innerHTML = '';
+  for(let i = 0; i < 7; i++){
+    const date = addDays(planWeekStart, i);
+    const dateStr = isoDate(date);
+    const entry = mealPlan.find(p => p.plan_date === dateStr);
+    const recipe = entry ? recipes.find(r => r.id === entry.recipe_id) : null;
+    const row = document.createElement('div');
+    row.className = 'plan-day';
+    row.innerHTML = `
+      <div class="plan-day-label">${WEEKDAY_NAMES[i]} ${date.getDate()}/${date.getMonth() + 1}</div>
+      <div class="plan-day-content">
+        ${entry
+          ? `<span class="plan-day-recipe"${recipe ? '' : ' style="color:var(--ink-soft); font-weight:400;"'}>${escapeHtml(recipe ? recipe.name : '(borttaget recept)')}</span><button class="plan-day-remove" type="button" aria-label="Ta bort">✕</button>`
+          : `<button class="btn btn-secondary plan-day-pick" type="button">+ Välj recept</button>`
+        }
+      </div>
+    `;
+    const pickBtn = row.querySelector('.plan-day-pick');
+    if(pickBtn){
+      pickBtn.onclick = () => openRecipePicker(async (recipeId) => {
+        await setPlanDay(dateStr, recipeId);
+        renderPlanDays();
+      });
+    }
+    const removeBtn = row.querySelector('.plan-day-remove');
+    if(removeBtn){
+      removeBtn.onclick = async () => { await clearPlanDay(dateStr); renderPlanDays(); };
+    }
+    daysEl.appendChild(row);
+  }
+}
+
+async function openWeekPlan(){
+  await loadMealPlan();
+  modalRoot.innerHTML = `
+    <div class="overlay" id="ovPlan">
+      <div class="modal" style="max-width:640px;">
+        <button class="modal-close" id="closePlan" aria-label="Stäng">✕</button>
+        <h2>Veckoplan</h2>
+        <div class="plan-nav">
+          <button class="btn btn-ghost" id="planPrevWeek" type="button">‹ Föregående</button>
+          <div class="plan-range" id="planRangeLabel"></div>
+          <button class="btn btn-ghost" id="planNextWeek" type="button">Nästa ›</button>
+        </div>
+        <div id="planDays"></div>
+        <div id="planError" style="display:none; color:#A8432B; font-size:13.5px; margin-top:10px; font-weight:600;"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="planRandomize" type="button">🎲 Slumpa förslag</button>
+          <span></span>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('closePlan').onclick = closeModal;
+  document.getElementById('ovPlan').onclick = (e) => { if(e.target.id === 'ovPlan') closeModal(); };
+  document.getElementById('planPrevWeek').onclick = () => { planWeekStart = addDays(planWeekStart, -7); renderPlanDays(); };
+  document.getElementById('planNextWeek').onclick = () => { planWeekStart = addDays(planWeekStart, 7); renderPlanDays(); };
+  document.getElementById('planRandomize').onclick = async () => {
+    const btn = document.getElementById('planRandomize');
+    btn.disabled = true; btn.textContent = 'Slumpar…';
+    await randomizeWeek();
+    btn.disabled = false; btn.textContent = '🎲 Slumpa förslag';
+  };
+  renderPlanDays();
+}
+document.getElementById('weekPlanBtn').onclick = openWeekPlan;
+
 function ownerName(id){
   const u = allUsers.find(x => x.id === id);
   return u ? u.name : 'Okänd';
@@ -764,7 +1000,8 @@ function renderTagBar(){
 
 function matchesFilters(r){
   const term = searchTerm.toLowerCase();
-  const textOk = !term || r.name.toLowerCase().includes(term) || (r.note || '').toLowerCase().includes(term);
+  const textOk = !term || r.name.toLowerCase().includes(term) || (r.note || '').toLowerCase().includes(term)
+    || (r.ingredients || []).some(ing => ing.toLowerCase().includes(term));
   const tagOk = activeTagFilters.size === 0 || (r.tags||[]).some(t => activeTagFilters.has(t));
   let scopeOk;
   if(viewScope === 'mine') scopeOk = r.owner_id === (currentUser && currentUser.id);
@@ -871,6 +1108,7 @@ function openDetail(id){
         </div>
         ${imagesOf(r).length ? `<div class="detail-gallery">${imagesOf(r).map((src,i) => `<img src="${src}" alt="" data-idx="${i}">`).join('')}</div>` : ''}
         ${r.link ? `<div><a class="detail-link" href="${r.link}" target="_blank" rel="noopener">${escapeHtml(r.link)}</a></div>` : ''}
+        ${r.ingredients && r.ingredients.length ? `<div class="detail-rating-label" style="margin-top:14px;">Ingredienser</div><ul class="detail-ingredients">${r.ingredients.map(ing => `<li>${escapeHtml(ing)}</li>`).join('')}</ul>` : ''}
         ${r.note ? `<div class="detail-text">${escapeHtml(r.note)}</div>` : ''}
         <div class="detail-date">Sparat ${new Date(r.created_at).toLocaleDateString('sv-SE', {year:'numeric', month:'long', day:'numeric'})}</div>
         <div id="detailError" style="display:none; color:#A8432B; font-size:13.5px; margin-bottom:10px; font-weight:600;"></div>
@@ -925,7 +1163,7 @@ function openDetail(id){
       copyBtn.disabled = true; copyBtn.textContent = 'Kopierar…';
       const payload = {
         name: r.name, link: r.link, note: r.note, images: imagesOf(r),
-        tags: r.tags || [], owner_id: currentUser.id, copied_from: r.id
+        tags: r.tags || [], ingredients: r.ingredients || [], owner_id: currentUser.id, copied_from: r.id
       };
       const { error } = await sb.from('recipes').insert([payload]);
       if(error){
@@ -1310,6 +1548,10 @@ function openForm(id){
           <textarea id="fText" placeholder="Klistra in eller skriv receptet, eller lägg till en kommentar…">${existing && existing.note ? escapeHtml(existing.note) : ''}</textarea>
         </div>
         <div class="field">
+          <label for="fIngredients">Ingredienser (valfritt, en per rad)</label>
+          <textarea id="fIngredients" placeholder="T.ex.&#10;400 g kycklingfilé&#10;2 dl grädde&#10;1 gul lök" style="min-height:80px;">${existing && existing.ingredients && existing.ingredients.length ? escapeHtml(existing.ingredients.join('\n')) : ''}</textarea>
+        </div>
+        <div class="field">
           <label>Bilder (valfritt, flera går bra)</label>
           <div class="imgpick">
             <label class="filelabel" for="fImage">Välj bilder</label>
@@ -1390,6 +1632,26 @@ function openForm(id){
     }
   }
 
+  function parseRecipeJsonLd(doc){
+    // Many recipe sites embed a schema.org Recipe block (for Google's rich-result
+    // snippets) with a real, structured ingredient list — free to read, no guessing.
+    const scripts = doc.querySelectorAll('script[type="application/ld+json"]');
+    for(const script of scripts){
+      let data;
+      try{ data = JSON.parse(script.textContent); }catch(e){ continue; }
+      const candidates = Array.isArray(data) ? data : (data['@graph'] || [data]);
+      for(const item of candidates){
+        if(!item || typeof item !== 'object') continue;
+        const type = item['@type'];
+        const isRecipe = type === 'Recipe' || (Array.isArray(type) && type.includes('Recipe'));
+        if(isRecipe && Array.isArray(item.recipeIngredient) && item.recipeIngredient.length){
+          return item.recipeIngredient.map(s => String(s).trim()).filter(Boolean);
+        }
+      }
+    }
+    return null;
+  }
+
   function parseMetaFromHtml(html, baseUrl){
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const getMeta = (prop) => {
@@ -1401,7 +1663,8 @@ function openForm(id){
     if(image){
       try{ image = new URL(image, baseUrl).href; }catch(e){ /* leave as-is */ }
     }
-    return { title: title ? title.trim() : null, image };
+    const ingredients = parseRecipeJsonLd(doc);
+    return { title: title ? title.trim() : null, image, ingredients };
   }
 
   function parseMetaFromJinaText(text){
@@ -1426,7 +1689,7 @@ function openForm(id){
         const html = await fetchViaProxy(p);
         if(html && html.length > 50){
           const info = parseMetaFromHtml(html, url);
-          if(info.title || info.image) return info;
+          if(info.title || info.image || (info.ingredients && info.ingredients.length)) return info;
         }
       }catch(e){ lastErr = e; }
     }
@@ -1454,16 +1717,24 @@ function openForm(id){
     try{
       const info = await fetchLinkPreview(url);
       const nameInput = document.getElementById('fName');
+      const ingredientsInput = document.getElementById('fIngredients');
       if(info.title && !nameInput.value.trim()) nameInput.value = info.title;
       if(info.image && !imageList.includes(info.image)){
         imageList.push(info.image);
         renderThumbs();
       }
-      if(!info.title && !info.image){
-        status.textContent = 'Hittade varken titel eller bild på sidan – fyll i manuellt.';
+      if(info.ingredients && info.ingredients.length && !ingredientsInput.value.trim()){
+        ingredientsInput.value = info.ingredients.join('\n');
+      }
+      const found = [];
+      if(info.title) found.push('titel');
+      if(info.image) found.push('bild');
+      if(info.ingredients && info.ingredients.length) found.push(info.ingredients.length + ' ingredienser');
+      if(!found.length){
+        status.textContent = 'Hittade varken titel, bild eller ingredienser på sidan – fyll i manuellt.';
         status.style.color = '#A8432B';
       }else{
-        status.textContent = 'Klart! Fyllde i det jag hittade — ändra gärna själv.';
+        status.textContent = 'Klart! Fyllde i ' + found.join(', ') + ' — ändra gärna själv.';
         status.style.color = '#4B6B4E';
       }
     }catch(e){
@@ -1520,6 +1791,7 @@ function openForm(id){
     if(!name){ formError.textContent = 'Skriv ett receptnamn.'; formError.style.display=''; return; }
     const link = document.getElementById('fLink').value.trim();
     const note = document.getElementById('fText').value.trim();
+    const ingredients = document.getElementById('fIngredients').value.split('\n').map(s => s.trim()).filter(Boolean);
     const saveBtn = document.getElementById('saveForm');
     saveBtn.textContent = 'Sparar…'; saveBtn.disabled = true;
 
@@ -1528,7 +1800,8 @@ function openForm(id){
       link: link || null,
       note: note || null,
       images: imageList,
-      tags: Array.from(chosenTags)
+      tags: Array.from(chosenTags),
+      ingredients
     };
 
     let error;
