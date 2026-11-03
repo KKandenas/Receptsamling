@@ -1613,42 +1613,75 @@ function parseMetaFromHtml(html, baseUrl){
   return { title: title ? title.trim() : null, image, ingredients };
 }
 
+function parseIngredientsFromMarkdown(text){
+  // Best-effort fallback when there's no schema.org data to read: look for a visible
+  // "Ingredienser" heading and grab the list under it from Jina's rendered markdown.
+  const lines = text.split('\n');
+  const startIdx = lines.findIndex(l => /^#{0,6}\s*ingrediens/i.test(l.trim()));
+  if(startIdx === -1) return null;
+  const items = [];
+  for(let i = startIdx + 1; i < lines.length; i++){
+    const line = lines[i].trim();
+    if(!line){ if(items.length) break; else continue; }
+    if(/^#{1,6}\s/.test(line)) break;
+    const m = line.match(/^[-*•]\s+(.+)$/) || line.match(/^\d+[.)]\s+(.+)$/);
+    if(m) items.push(m[1].trim());
+    else if(items.length) break;
+  }
+  return items.length ? items : null;
+}
+
 function parseMetaFromJinaText(text){
   const m = text.match(/^Title:\s*(.+)$/m);
   const title = m ? m[1].trim() : null;
   const imgMatch = text.match(/!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/);
   const image = imgMatch ? imgMatch[1] : null;
-  return { title, image };
+  const ingredients = parseIngredientsFromMarkdown(text);
+  return { title, image, ingredients };
 }
 
 async function fetchLinkPreview(url){
   // Browsers block us from fetching other sites' HTML directly (CORS), so we go via
   // free proxy services instead. They come and go (and are sometimes just slow), so we
-  // race a few of them in parallel and use whichever answers first with something
-  // useful, instead of waiting out a dead/slow one before trying the next.
+  // run a few in parallel rather than waiting out a dead/slow one before trying the next.
   const htmlProxies = [
     'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
     'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url)
   ];
-  const attempts = htmlProxies.map(p => fetchViaProxy(p).then(html => {
+  const htmlResults = await Promise.allSettled(htmlProxies.map(p => fetchViaProxy(p).then(html => {
     if(!html || html.length <= 50) throw new Error('tomt svar');
-    const info = parseMetaFromHtml(html, url);
-    if(!(info.title || info.image || (info.ingredients && info.ingredients.length))) throw new Error('inget användbart hittades');
-    return info;
-  }));
-  try{
-    return await Promise.any(attempts);
-  }catch(aggregateErr){
+    return parseMetaFromHtml(html, url);
+  })));
+  const htmlInfos = htmlResults
+    .filter(r => r.status === 'fulfilled')
+    .map(r => r.value)
+    .filter(info => info.title || info.image || (info.ingredients && info.ingredients.length));
+
+  // A title/image-only result from a plain HTML fetch doesn't mean we're done: many
+  // sites only render their ingredient list via JavaScript, so a result WITH
+  // ingredients always wins, and we keep trying (via Jina, which renders the page)
+  // until we have ingredients or have genuinely exhausted every source.
+  let best = htmlInfos.find(info => info.ingredients && info.ingredients.length) || htmlInfos[0] || null;
+
+  if(!best || !(best.ingredients && best.ingredients.length)){
     try{
       const text = await fetchViaProxy('https://r.jina.ai/' + url);
       if(text && text.length > 50){
-        const info = parseMetaFromJinaText(text);
-        if(info.title || info.image) return info;
+        const jinaInfo = parseMetaFromJinaText(text);
+        if(!best){
+          if(jinaInfo.title || jinaInfo.image || (jinaInfo.ingredients && jinaInfo.ingredients.length)) best = jinaInfo;
+        }else if(jinaInfo.ingredients && jinaInfo.ingredients.length){
+          best = { ...best, ingredients: jinaInfo.ingredients };
+        }
       }
-    }catch(e){ /* fall through to the error below */ }
-    const firstErr = aggregateErr.errors && aggregateErr.errors[0];
-    throw (firstErr || new Error('Ingen av mellanhands-tjänsterna svarade'));
+    }catch(e){ /* keep whatever the HTML proxies already found, if anything */ }
   }
+
+  if(!best){
+    const firstErr = htmlResults.find(r => r.status === 'rejected');
+    throw (firstErr ? firstErr.reason : new Error('Ingen av mellanhands-tjänsterna svarade'));
+  }
+  return best;
 }
 
 function openBackfillIngredients(){
