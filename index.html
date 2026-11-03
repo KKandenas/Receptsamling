@@ -86,8 +86,8 @@
   }
   .sub{ color:var(--fg-soft); font-size:14.5px; max-width:52ch; line-height:1.5;}
 
+  .icon-cluster{ position:fixed; top:16px; right:16px; z-index:60; display:flex; gap:10px; }
   .theme-toggle{
-    position:fixed; top:16px; right:16px; z-index:60;
     width:38px; height:38px; border-radius:50%;
     background:var(--panel-bg); border:1px solid var(--panel-border); color:var(--panel-text);
     font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center;
@@ -133,6 +133,7 @@
     display:none;
   }
   .dropdown-panel.open{ display:block; }
+  .dropdown-panel.align-right{ left:auto; right:0; }
   .dropdown-item{
     display:block; width:100%; text-align:left; background:none; border:none; border-radius:6px;
     padding:9px 10px; font-family:'Karla',sans-serif; font-size:14px; color:var(--ink); cursor:pointer;
@@ -197,6 +198,22 @@
   }
   .fav-btn:hover{ transform:scale(1.08); }
   .fav-btn.active{ color: var(--brick); }
+  .plan-card-day{
+    font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.05em; text-transform:uppercase;
+    color: var(--mustard-deep); font-weight:700; margin:26px 0 6px;
+  }
+  .plan-card-remove{
+    position:absolute; top:10px; left:10px; width:30px; height:30px; border-radius:50%;
+    background:rgba(255,253,246,0.85); border:1px solid var(--card-edge); color:var(--brick);
+    font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    transition: transform .12s ease;
+  }
+  .plan-card-remove:hover{ transform:scale(1.08); }
+  .plan-card-empty{
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px;
+    min-height:180px; border:1.5px dashed var(--card-edge); background:transparent; box-shadow:none; cursor:default;
+  }
+  .plan-card-empty:hover{ transform:none; box-shadow:none; }
   .card-thumb{
     width:100%; height:120px; object-fit:cover; border-radius:2px; margin-bottom:10px;
     filter: saturate(0.98);
@@ -268,7 +285,6 @@
     color:#6B5A2E; cursor:pointer;
   }
   .chip-select.active{ background:var(--mustard); border-color:var(--mustard); color:#251C0B; }
-  .chip-select.off{ background:transparent; border-color:#DFC7BE; color:#B3A290; text-decoration:line-through; }
   .customtag{ display:flex; gap:8px; margin-top:9px; }
   .customtag input{ flex:1; }
   .imgpick{
@@ -363,17 +379,9 @@
   .sitedesc{ font-size:12.5px; color:var(--ink-soft); margin-top:2px; }
   .sitesearch-btn{ flex:0 0 auto; white-space:nowrap; }
 
-  .plan-nav{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin:14px 0 18px; }
+  .planbar{ display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:26px; }
   .plan-range{ font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.04em; }
   .plan-day{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 0; border-bottom:1px solid #EDE4CC; }
-  .plan-day-label{ font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink-soft); min-width:60px; }
-  .plan-day-content{ display:flex; align-items:center; gap:10px; flex:1 1 auto; justify-content:flex-end; }
-  .plan-day-recipe{
-    font-weight:600; text-align:right; background:none; border:none; padding:0;
-    font-family:'Karla',sans-serif; font-size:14.5px; color:var(--ink); cursor:pointer;
-  }
-  .plan-day-recipe:hover{ text-decoration:underline; }
-  .plan-day-remove{ background:none; border:none; color:var(--brick); font-size:15px; cursor:pointer; padding:2px 4px; flex:0 0 auto; }
   .picker-item{
     display:flex; justify-content:space-between; align-items:center; width:100%; text-align:left;
     background:none; border:none; border-bottom:1px solid #EDE4CC; padding:9px 4px; cursor:pointer;
@@ -434,7 +442,19 @@
   </div>
 </div>
 
-<button class="theme-toggle" id="themeToggleBtn" type="button" aria-label="Växla mellan mörkt och ljust läge">🌙</button>
+<div class="icon-cluster">
+  <div class="dropdown-wrap">
+    <button class="theme-toggle" id="moreMenuBtn" type="button" aria-label="Fler alternativ" aria-haspopup="true" aria-expanded="false">⚙</button>
+    <div class="dropdown-panel align-right" id="moreMenuPanel">
+      <button class="dropdown-item" id="manageTagsBtn" type="button">Hantera taggar</button>
+      <button class="dropdown-item" id="exploreBtn" type="button">Fler recept</button>
+      <button class="dropdown-item" id="backfillBtn" type="button">Hämta ingredienser</button>
+      <button class="dropdown-item" id="exportBtn" type="button">Exportera recept</button>
+      <button class="dropdown-item" id="exportPdfBtn" type="button">Exportera som PDF</button>
+    </div>
+  </div>
+  <button class="theme-toggle" id="themeToggleBtn" type="button" aria-label="Växla mellan mörkt och ljust läge">🌙</button>
+</div>
 
 <div class="wrap" id="app" style="display:none;">
   <header class="top">
@@ -455,22 +475,12 @@
       <option value="all">Alla recept</option>
       <option value="mine">Mina recept</option>
       <option value="favorites">Favoriter</option>
+      <option value="weekplan">Veckoplan</option>
     </select>
-    <button class="btn btn-ghost" id="weekPlanBtn">Veckoplan</button>
-    <div class="dropdown-wrap">
-      <button class="btn btn-ghost" id="moreMenuBtn" type="button" aria-haspopup="true" aria-expanded="false">⚙ Mer</button>
-      <div class="dropdown-panel" id="moreMenuPanel">
-        <button class="dropdown-item" id="manageTagsBtn" type="button">Hantera taggar</button>
-        <button class="dropdown-item" id="exploreBtn" type="button">Fler recept</button>
-        <button class="dropdown-item" id="backfillBtn" type="button">Hämta ingredienser</button>
-        <button class="dropdown-item" id="exportBtn" type="button">Exportera recept</button>
-        <button class="dropdown-item" id="exportPdfBtn" type="button">Exportera som PDF</button>
-      </div>
-    </div>
     <button class="btn btn-primary" id="openAddBtn">+ Nytt recept</button>
   </div>
 
-  <div class="tagfilter-row">
+  <div class="tagfilter-row" id="tagfilterRow">
     <div class="dropdown-wrap">
       <button class="btn btn-ghost" id="tagFilterBtn" type="button" aria-haspopup="true" aria-expanded="false">🏷 Taggar<span class="tagfilter-count" id="tagFilterCount" style="display:none;"></span></button>
       <div class="dropdown-panel" id="tagFilterPanel">
@@ -480,6 +490,20 @@
     <div class="active-tag-pills" id="activeTagPills"></div>
     <button class="btn btn-ghost" id="tagSearchOnlineBtn" type="button" style="display:none;">🔎 Sök förslag på nätet för valda taggar</button>
   </div>
+
+  <div class="planbar" id="planBar" style="display:none;">
+    <button class="btn btn-ghost" id="planPrevWeek" type="button">‹ Föregående</button>
+    <div class="plan-range" id="planRangeLabel"></div>
+    <button class="btn btn-ghost" id="planNextWeek" type="button">Nästa ›</button>
+    <button class="btn btn-secondary" id="planRandomize" type="button">🎲 Slumpa förslag</button>
+    <div class="dropdown-wrap">
+      <button class="btn btn-ghost" id="planTagFilterBtn" type="button" aria-haspopup="true" aria-expanded="false">🚫 Uteslut taggar<span class="tagfilter-count" id="planTagFilterCount" style="display:none;"></span></button>
+      <div class="dropdown-panel" id="planTagFilterPanel">
+        <div class="tagbar" id="planTagFilterRow" style="margin-bottom:0;"></div>
+      </div>
+    </div>
+  </div>
+  <div id="planError" style="display:none; color:var(--err); font-size:13.5px; margin:0 0 16px; font-weight:600;"></div>
 
   <div class="grid" id="grid">
     <div class="loading">Läser in recept…</div>
@@ -791,7 +815,7 @@ async function randomizeWeek(){
     planError.style.display = '';
   }
   await loadMealPlan();
-  renderPlanDays();
+  renderGrid();
 }
 
 function openRecipePicker(onSelect){
@@ -828,91 +852,41 @@ function openRecipePicker(onSelect){
 
 const WEEKDAY_NAMES = ['Mån','Tis','Ons','Tor','Fre','Lör','Sön'];
 
-function renderPlanDays(){
+function renderWeekPlanGrid(){
   const planError = document.getElementById('planError');
   if(planError) planError.style.display = 'none';
   const weekEnd = addDays(planWeekStart, 6);
   document.getElementById('planRangeLabel').textContent =
     `${planWeekStart.toLocaleDateString('sv-SE', { day:'numeric', month:'short' })} – ${weekEnd.toLocaleDateString('sv-SE', { day:'numeric', month:'short', year:'numeric' })}`;
 
-  const daysEl = document.getElementById('planDays');
-  daysEl.innerHTML = '';
+  grid.innerHTML = '';
   for(let i = 0; i < 7; i++){
     const date = addDays(planWeekStart, i);
     const dateStr = isoDate(date);
+    const dayLabel = `${WEEKDAY_NAMES[i]} ${date.getDate()}/${date.getMonth() + 1}`;
     const entry = mealPlan.find(p => p.plan_date === dateStr);
     const recipe = entry ? recipes.find(r => r.id === entry.recipe_id) : null;
-    const row = document.createElement('div');
-    row.className = 'plan-day';
-    row.innerHTML = `
-      <div class="plan-day-label">${WEEKDAY_NAMES[i]} ${date.getDate()}/${date.getMonth() + 1}</div>
-      <div class="plan-day-content">
-        ${entry
-          ? (recipe
-              ? `<button type="button" class="plan-day-recipe" data-id="${recipe.id}">${escapeHtml(recipe.name)}</button><button class="plan-day-remove" type="button" aria-label="Ta bort">✕</button>`
-              : `<span class="plan-day-recipe" style="color:var(--ink-soft); font-weight:400; cursor:default;">(borttaget recept)</span><button class="plan-day-remove" type="button" aria-label="Ta bort">✕</button>`)
-          : `<button class="btn btn-secondary plan-day-pick" type="button">+ Välj recept</button>`
-        }
-      </div>
-    `;
-    const pickBtn = row.querySelector('.plan-day-pick');
-    if(pickBtn){
-      pickBtn.onclick = () => openRecipePicker(async (recipeId) => {
+
+    if(recipe){
+      grid.appendChild(buildRecipeCard(recipe, {
+        dayLabel,
+        onRemove: async () => { await clearPlanDay(dateStr); renderGrid(); }
+      }));
+    }else{
+      const card = document.createElement('div');
+      card.className = 'card plan-card-empty';
+      card.innerHTML = `
+        <div class="plan-card-day">${escapeHtml(dayLabel)}</div>
+        <button class="btn btn-secondary" type="button">+ Välj recept</button>
+      `;
+      card.querySelector('button').onclick = () => openRecipePicker(async (recipeId) => {
         await setPlanDay(dateStr, recipeId);
-        renderPlanDays();
+        renderGrid();
       });
+      grid.appendChild(card);
     }
-    const recipeBtn = row.querySelector('button.plan-day-recipe');
-    if(recipeBtn){
-      recipeBtn.onclick = () => openDetail(recipeBtn.dataset.id);
-    }
-    const removeBtn = row.querySelector('.plan-day-remove');
-    if(removeBtn){
-      removeBtn.onclick = async () => { await clearPlanDay(dateStr); renderPlanDays(); };
-    }
-    daysEl.appendChild(row);
   }
 }
-
-async function openWeekPlan(){
-  await loadMealPlan();
-  modalRoot.innerHTML = `
-    <div class="overlay" id="ovPlan">
-      <div class="modal" style="max-width:640px;">
-        <button class="modal-close" id="closePlan" aria-label="Stäng">✕</button>
-        <h2>Veckoplan</h2>
-        <div class="plan-nav">
-          <button class="btn btn-ghost" id="planPrevWeek" type="button">‹ Föregående</button>
-          <div class="plan-range" id="planRangeLabel"></div>
-          <button class="btn btn-ghost" id="planNextWeek" type="button">Nästa ›</button>
-        </div>
-        <div id="planDays"></div>
-        <div class="field" style="margin-top:16px;">
-          <label>Uteslut taggar från "Slumpa förslag" (klicka för att stänga av/på)</label>
-          <div class="chiprow" id="planTagFilterRow"></div>
-        </div>
-        <div id="planError" style="display:none; color:#A8432B; font-size:13.5px; margin-top:10px; font-weight:600;"></div>
-        <div class="modal-actions">
-          <button class="btn btn-secondary" id="planRandomize" type="button">🎲 Slumpa förslag</button>
-          <span></span>
-        </div>
-      </div>
-    </div>
-  `;
-  document.getElementById('closePlan').onclick = closeModal;
-  document.getElementById('ovPlan').onclick = (e) => { if(e.target.id === 'ovPlan') closeModal(); };
-  document.getElementById('planPrevWeek').onclick = () => { planWeekStart = addDays(planWeekStart, -7); renderPlanDays(); };
-  document.getElementById('planNextWeek').onclick = () => { planWeekStart = addDays(planWeekStart, 7); renderPlanDays(); };
-  document.getElementById('planRandomize').onclick = async () => {
-    const btn = document.getElementById('planRandomize');
-    btn.disabled = true; btn.textContent = 'Slumpar…';
-    await randomizeWeek();
-    btn.disabled = false; btn.textContent = '🎲 Slumpa förslag';
-  };
-  renderPlanTagFilter();
-  renderPlanDays();
-}
-document.getElementById('weekPlanBtn').onclick = openWeekPlan;
 
 function renderPlanTagFilter(){
   const row = document.getElementById('planTagFilterRow');
@@ -921,7 +895,7 @@ function renderPlanTagFilter(){
   allTagsInUse().forEach(tag => {
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = 'chip-select' + (planExcludedTags.has(tag) ? ' off' : '');
+    b.className = 'chip' + (planExcludedTags.has(tag) ? ' active' : '');
     b.textContent = tag;
     b.onclick = () => {
       if(planExcludedTags.has(tag)) planExcludedTags.delete(tag); else planExcludedTags.add(tag);
@@ -930,6 +904,9 @@ function renderPlanTagFilter(){
     };
     row.appendChild(b);
   });
+  const countEl = document.getElementById('planTagFilterCount');
+  countEl.textContent = planExcludedTags.size || '';
+  countEl.style.display = planExcludedTags.size ? '' : 'none';
 }
 
 function ownerName(id){
@@ -1019,8 +996,22 @@ document.getElementById('createUserBtn').onclick = async () => {
   await selectUser(data[0]);
 };
 
-document.getElementById('scopeSelect').addEventListener('change', (e) => {
+function updateScopeUI(){
+  const isPlan = viewScope === 'weekplan';
+  searchInput.style.display = isPlan ? 'none' : '';
+  document.getElementById('sortSelect').style.display = isPlan ? 'none' : '';
+  document.getElementById('tagfilterRow').style.display = isPlan ? 'none' : '';
+  document.getElementById('planBar').style.display = isPlan ? '' : 'none';
+  document.getElementById('planError').style.display = 'none';
+}
+
+document.getElementById('scopeSelect').addEventListener('change', async (e) => {
   viewScope = e.target.value;
+  updateScopeUI();
+  if(viewScope === 'weekplan'){
+    await loadMealPlan();
+    renderPlanTagFilter();
+  }
   renderGrid();
 });
 
@@ -1133,7 +1124,39 @@ function getFilteredSortedList(){
   });
 }
 
+function buildRecipeCard(r, opts){
+  opts = opts || {};
+  const imgs = imagesOf(r);
+  const stats = ratingStatsFor(r.id);
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.tabIndex = 0;
+  card.setAttribute('role','button');
+  card.onclick = () => openDetail(r.id);
+  card.onkeydown = (e) => { if(e.key === 'Enter' && e.target === card) openDetail(r.id); };
+  card.innerHTML = `
+    <div class="pin"></div>
+    <button class="fav-btn${isFavorited(r.id) ? ' active' : ''}" type="button" aria-label="${isFavorited(r.id) ? 'Ta bort favorit' : 'Lägg till favorit'}">${isFavorited(r.id) ? '♥' : '♡'}</button>
+    ${opts.onRemove ? `<button class="plan-card-remove" type="button" aria-label="Ta bort från veckoplanen">✕</button>` : ''}
+    ${opts.dayLabel ? `<div class="plan-card-day">${escapeHtml(opts.dayLabel)}</div>` : ''}
+    ${imgs[0] ? `<div style="position:relative;"><img class="card-thumb" src="${imgs[0]}" alt="">${imgs.length > 1 ? `<span class="tag-pill" style="position:absolute; bottom:6px; right:6px; background:#2A2620; color:#FBF6E9; border-color:#2A2620;">+${imgs.length - 1}</span>` : ''}</div>` : ''}
+    <div class="card-name">${escapeHtml(r.name)}</div>
+    <div class="card-owner">${escapeHtml(ownerName(r.owner_id))}s recept</div>
+    <div class="card-stars">${starsMarkupReadonly(stats.avg, stats.count)}</div>
+    <div class="card-meta">${(r.tags||[]).map(t => `<span class="tag-pill">${escapeHtml(t)}</span>`).join('')}</div>
+    <div class="card-snippet">${escapeHtml(snippetFor(r))}</div>
+    <div class="card-source">${r.link ? '🔗 länk' : ''} ${imgs.length ? '🖼 bild' : ''} ${(!r.link && !imgs.length) ? '📝 anteckning' : ''}</div>
+  `;
+  card.querySelector('.fav-btn').onclick = (e) => { e.stopPropagation(); toggleFavorite(r.id); };
+  if(opts.onRemove){
+    card.querySelector('.plan-card-remove').onclick = (e) => { e.stopPropagation(); opts.onRemove(); };
+  }
+  return card;
+}
+
 function renderGrid(){
+  if(viewScope === 'weekplan'){ renderWeekPlanGrid(); return; }
+
   const list = getFilteredSortedList();
 
   grid.innerHTML = '';
@@ -1141,29 +1164,7 @@ function renderGrid(){
     grid.innerHTML = `<div class="empty">Tomt så här långt.<span>Tryck på "+ Nytt recept" för att spara det första.</span></div>`;
     return;
   }
-  list.forEach(r => {
-    const imgs = imagesOf(r);
-    const stats = ratingStatsFor(r.id);
-    const card = document.createElement('div');
-    card.className = 'card';
-    card.tabIndex = 0;
-    card.setAttribute('role','button');
-    card.onclick = () => openDetail(r.id);
-    card.onkeydown = (e) => { if(e.key === 'Enter' && e.target === card) openDetail(r.id); };
-    card.innerHTML = `
-      <div class="pin"></div>
-      <button class="fav-btn${isFavorited(r.id) ? ' active' : ''}" type="button" aria-label="${isFavorited(r.id) ? 'Ta bort favorit' : 'Lägg till favorit'}">${isFavorited(r.id) ? '♥' : '♡'}</button>
-      ${imgs[0] ? `<div style="position:relative;"><img class="card-thumb" src="${imgs[0]}" alt="">${imgs.length > 1 ? `<span class="tag-pill" style="position:absolute; bottom:6px; right:6px; background:#2A2620; color:#FBF6E9; border-color:#2A2620;">+${imgs.length - 1}</span>` : ''}</div>` : ''}
-      <div class="card-name">${escapeHtml(r.name)}</div>
-      <div class="card-owner">${escapeHtml(ownerName(r.owner_id))}s recept</div>
-      <div class="card-stars">${starsMarkupReadonly(stats.avg, stats.count)}</div>
-      <div class="card-meta">${(r.tags||[]).map(t => `<span class="tag-pill">${escapeHtml(t)}</span>`).join('')}</div>
-      <div class="card-snippet">${escapeHtml(snippetFor(r))}</div>
-      <div class="card-source">${r.link ? '🔗 länk' : ''} ${imgs.length ? '🖼 bild' : ''} ${(!r.link && !imgs.length) ? '📝 anteckning' : ''}</div>
-    `;
-    card.querySelector('.fav-btn').onclick = (e) => { e.stopPropagation(); toggleFavorite(r.id); };
-    grid.appendChild(card);
-  });
+  list.forEach(r => grid.appendChild(buildRecipeCard(r)));
 }
 
 function escapeHtml(s){
@@ -1197,8 +1198,18 @@ function setupDropdown(btnId, panelId, { closeOnItemClick } = {}){
 }
 const closeMoreMenu = setupDropdown('moreMenuBtn', 'moreMenuPanel', { closeOnItemClick: true });
 const closeTagFilter = setupDropdown('tagFilterBtn', 'tagFilterPanel');
-document.addEventListener('click', () => { closeMoreMenu(); closeTagFilter(); });
-document.addEventListener('keydown', (e) => { if(e.key === 'Escape'){ closeMoreMenu(); closeTagFilter(); } });
+const closePlanTagFilter = setupDropdown('planTagFilterBtn', 'planTagFilterPanel');
+document.addEventListener('click', () => { closeMoreMenu(); closeTagFilter(); closePlanTagFilter(); });
+document.addEventListener('keydown', (e) => { if(e.key === 'Escape'){ closeMoreMenu(); closeTagFilter(); closePlanTagFilter(); } });
+
+document.getElementById('planPrevWeek').onclick = () => { planWeekStart = addDays(planWeekStart, -7); renderGrid(); };
+document.getElementById('planNextWeek').onclick = () => { planWeekStart = addDays(planWeekStart, 7); renderGrid(); };
+document.getElementById('planRandomize').onclick = async () => {
+  const btn = document.getElementById('planRandomize');
+  btn.disabled = true; btn.textContent = 'Slumpar…';
+  await randomizeWeek();
+  btn.disabled = false; btn.textContent = '🎲 Slumpa förslag';
+};
 
 function openDetail(id){
   const r = recipes.find(x => x.id === id);
