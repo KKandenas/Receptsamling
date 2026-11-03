@@ -12,12 +12,13 @@ Byggd som en enda fristående webbsida (`index.html`), värd gratis på GitHub P
 - **Alla recept / Mina recept** – bläddra i allas recept, eller filtrera till bara din egen låda.
 - **Kopiera recept** – gilla någon annans recept? Kopiera det till din egen låda med en knapptryckning. Man kan bara redigera/ta bort sina egna recept.
 - **Spara vad som helst** – receptnamn, taggar, en länk, fri text/anteckning, och flera bilder per recept.
-- **Hämta info automatiskt** – klistra in en länk och låt appen försöka hämta titel och bild automatiskt från sidan.
+- **Hämta info automatiskt** – klistra in en länk och låt appen försöka hämta titel, bild och (om sajten har strukturerad receptdata) ingredienslistan automatiskt från sidan.
 - **Zoombara bilder** – bra när receptet ligger inbakat i en bild (t.ex. ett foto av en kokbokssida).
 - **Egna taggar** – lägg till, byt namn på eller ta bort taggar/kategorier (förrätt, huvudrätt, fisk, kött, osv.) via "Hantera taggar".
 - **Betygsätt recept** – klicka på 1–5 stjärnor för att sätta ditt eget betyg. Varje person i receptlådan har sitt eget betyg, och kortet visar snittet av allas betyg.
 - **Favoriter** – hjärtmarkera vems recept som helst och hitta dem snabbt igen under "Favoriter", utan att behöva kopiera dem till din egen låda.
 - **Ljust/mörkt läge** – växla tema med knappen uppe i hörnet, valet sparas i din webbläsare.
+- **Veckoplanering** – planera din vecka med recept från hela receptlådan, eller låt "Slumpa förslag" fylla tomma dagar automatiskt (med viss variation om recepten är taggade t.ex. Fisk/Kött/Vegetariskt).
 - **Sök, filtrera och sortera** – sök på namn eller anteckningstext, filtrera på taggar, sortera på senast tillagda, bokstavsordning eller betyg.
 - **Export** – exportera allt som en JSON-backup, eller som en snygg utskriftsvänlig PDF (med klickbara länkar), som respekterar aktiva filter.
 
@@ -65,6 +66,7 @@ create table if not exists recipes (
   tags text[] default '{}',
   link text,
   note text,
+  ingredients text[] default '{}',
   images text[] default '{}',
   copied_from uuid references recipes(id) on delete set null,
   owner_id uuid references users(id),
@@ -72,6 +74,10 @@ create table if not exists recipes (
 );
 alter table recipes enable row level security;
 create policy "allow all" on recipes for all using (true) with check (true);
+-- Om du redan hade recipes-tabellen sedan tidigare (t.ex. uppgraderar en befintlig
+-- installation) skapar inte raderna ovan kolumnen — kör även denna rad, den är säker
+-- att köra om (gör inget om kolumnen redan finns):
+alter table recipes add column if not exists ingredients text[] default '{}';
 
 -- Betyg
 create table if not exists ratings (
@@ -95,6 +101,18 @@ create table if not exists favorites (
 );
 alter table favorites enable row level security;
 create policy "allow all" on favorites for all using (true) with check (true);
+
+-- Veckoplan
+create table if not exists meal_plan (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  plan_date date not null,
+  recipe_id uuid not null references recipes(id) on delete cascade,
+  created_at timestamptz default now(),
+  unique (user_id, plan_date)
+);
+alter table meal_plan enable row level security;
+create policy "allow all" on meal_plan for all using (true) with check (true);
 
 -- Skapa en första receptlåda
 insert into users (name) values ('Irene') on conflict (name) do nothing;
