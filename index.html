@@ -316,6 +316,13 @@
   .detail-text{ white-space:pre-wrap; line-height:1.6; font-size:14.5px; color:#3A362C; margin-top:6px; }
   .detail-ingredients{ margin:6px 0 0; padding-left:20px; font-size:14.5px; line-height:1.6; color:#3A362C; }
   .detail-ingredients li{ margin-bottom:2px; }
+  .shop-section{ margin-bottom:20px; }
+  .shop-section-title{ font-family:'Fraunces',serif; font-weight:600; font-size:17px; margin:0 0 8px; }
+  .shop-item{ display:flex; align-items:center; gap:10px; padding:5px 0; font-size:14.5px; }
+  .shop-item input[type=checkbox]{ width:17px; height:17px; accent-color:var(--mustard-deep); cursor:pointer; flex:0 0 auto; }
+  .shop-item label{ cursor:pointer; }
+  .shop-item.checked label{ text-decoration:line-through; color:var(--ink-soft); }
+  .shop-missing{ font-size:13px; color:var(--ink-soft); font-style:italic; }
   .detail-date{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#9C947C; margin-top:18px; }
 
   .loading{ grid-column: 1/-1; text-align:center; padding:60px 10px; color:var(--whoami-text); font-family:'Karla',sans-serif; }
@@ -497,6 +504,7 @@
     <div class="plan-range" id="planRangeLabel"></div>
     <button class="btn btn-ghost" id="planNextWeek" type="button">Nästa ›</button>
     <button class="btn btn-secondary" id="planRandomize" type="button">🎲 Slumpa förslag</button>
+    <button class="btn btn-ghost" id="planShoppingList" type="button">🛒 Inköpslista</button>
     <div class="dropdown-wrap">
       <button class="btn btn-ghost" id="planTagFilterBtn" type="button" aria-haspopup="true" aria-expanded="false">🚫 Uteslut taggar<span class="tagfilter-count" id="planTagFilterCount" style="display:none;"></span></button>
       <div class="dropdown-panel" id="planTagFilterPanel">
@@ -852,6 +860,71 @@ function openRecipePicker(onSelect){
 }
 
 const WEEKDAY_NAMES = ['Mån','Tis','Ons','Tor','Fre','Lör','Sön'];
+
+function loadShoppingChecked(weekKey){
+  try{
+    const raw = localStorage.getItem('receptladan_shop_' + weekKey);
+    return new Set(raw ? JSON.parse(raw) : []);
+  }catch(e){ return new Set(); }
+}
+function saveShoppingChecked(weekKey, checked){
+  try{ localStorage.setItem('receptladan_shop_' + weekKey, JSON.stringify(Array.from(checked))); }catch(e){ /* ignore */ }
+}
+
+function openShoppingList(){
+  const weekKey = isoDate(planWeekStart);
+  const checked = loadShoppingChecked(weekKey);
+
+  const seenRecipeIds = new Set();
+  const weekRecipes = [];
+  for(let i = 0; i < 7; i++){
+    const entry = mealPlan.find(p => p.plan_date === isoDate(addDays(planWeekStart, i)));
+    const recipe = entry && recipes.find(r => r.id === entry.recipe_id);
+    if(recipe && !seenRecipeIds.has(recipe.id)){
+      seenRecipeIds.add(recipe.id);
+      weekRecipes.push(recipe);
+    }
+  }
+
+  const weekEnd = addDays(planWeekStart, 6);
+  const rangeLabel = `${planWeekStart.toLocaleDateString('sv-SE', { day:'numeric', month:'short' })} – ${weekEnd.toLocaleDateString('sv-SE', { day:'numeric', month:'short', year:'numeric' })}`;
+
+  modalRoot.innerHTML = `
+    <div class="overlay" id="ovShop">
+      <div class="modal">
+        <button class="modal-close" id="closeShop" aria-label="Stäng">✕</button>
+        <h2>Inköpslista</h2>
+        <p class="explore-intro">${escapeHtml(rangeLabel)} — en lista per recept, precis som ingredienserna är sparade (inga mängder slås ihop eller räknas om).</p>
+        ${weekRecipes.length === 0 ? `<p style="color:var(--ink-soft); font-size:14px;">Inga recept inplanerade den här veckan än.</p>` : weekRecipes.map(r => `
+          <div class="shop-section">
+            <div class="shop-section-title">${escapeHtml(r.name)}</div>
+            ${r.ingredients && r.ingredients.length
+              ? r.ingredients.map((ing, idx) => {
+                  const key = r.id + '::' + idx;
+                  const isChecked = checked.has(key);
+                  return `<div class="shop-item${isChecked ? ' checked' : ''}">
+                    <input type="checkbox" id="shop-${key}" data-key="${key}" ${isChecked ? 'checked' : ''}>
+                    <label for="shop-${key}">${escapeHtml(ing)}</label>
+                  </div>`;
+                }).join('')
+              : `<div class="shop-missing">Inga sparade ingredienser — kolla receptet manuellt.</div>`
+            }
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+  document.getElementById('closeShop').onclick = closeModal;
+  document.getElementById('ovShop').onclick = (e) => { if(e.target.id === 'ovShop') closeModal(); };
+  modalRoot.querySelectorAll('.shop-item input[type=checkbox]').forEach(cb => {
+    cb.onchange = () => {
+      const key = cb.dataset.key;
+      if(cb.checked) checked.add(key); else checked.delete(key);
+      saveShoppingChecked(weekKey, checked);
+      cb.closest('.shop-item').classList.toggle('checked', cb.checked);
+    };
+  });
+}
 
 function renderWeekPlanGrid(){
   const planError = document.getElementById('planError');
@@ -1211,6 +1284,7 @@ document.getElementById('planRandomize').onclick = async () => {
   await randomizeWeek();
   btn.disabled = false; btn.textContent = '🎲 Slumpa förslag';
 };
+document.getElementById('planShoppingList').onclick = openShoppingList;
 
 function openDetail(id){
   const r = recipes.find(x => x.id === id);
