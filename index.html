@@ -26,6 +26,37 @@
     --brick: #A8432B;
     --pin: #8C8272;
     --ring: rgba(217,164,65,0.55);
+
+    --fg: #FBF6E9;
+    --fg-soft: #C9C2AE;
+    --panel-bg: #26332A;
+    --panel-border: #3A4438;
+    --panel-text: #F3EFE2;
+    --panel-placeholder: #8E8B78;
+    --line: #454F41;
+    --ghost-text: #E7E1CE;
+    --ghost-hover: #2B372D;
+    --label-muted: #CFC9B6;
+    --whoami-text: #B7B199;
+    --muted: #A7A188;
+    --err: #E7A891;
+  }
+  :root[data-theme="light"]{
+    --bg: #F3ECDC;
+    --bg-2: #EAE0C8;
+    --fg: #2A2620;
+    --fg-soft: #6B6455;
+    --panel-bg: #FFFDF6;
+    --panel-border: #DED2AC;
+    --panel-text: #2A2620;
+    --panel-placeholder: #9C947C;
+    --line: #DAC98A;
+    --ghost-text: #5E4E22;
+    --ghost-hover: #EFE7CE;
+    --label-muted: #6B5A2E;
+    --whoami-text: #6B6455;
+    --muted: #8C8262;
+    --err: #A8432B;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
@@ -33,10 +64,11 @@
     background:
       radial-gradient(1200px 600px at 15% -10%, var(--bg-2), transparent 60%),
       var(--bg);
-    color: var(--card);
+    color: var(--fg);
     font-family: 'Karla', sans-serif;
     min-height:100vh;
     -webkit-font-smoothing:antialiased;
+    transition: background-color .15s ease, color .15s ease;
   }
   ::selection{ background: var(--mustard); color:#1F2A22; }
 
@@ -49,10 +81,18 @@
   }
   h1{
     font-family:'Fraunces', serif; font-weight:600; font-optical-sizing:auto;
-    font-size: clamp(32px, 6vw, 52px); margin:2px 0 4px; color:#FBF6E9;
+    font-size: clamp(32px, 6vw, 52px); margin:2px 0 4px; color:var(--fg);
     letter-spacing:-0.01em;
   }
-  .sub{ color:#C9C2AE; font-size:14.5px; max-width:52ch; line-height:1.5;}
+  .sub{ color:var(--fg-soft); font-size:14.5px; max-width:52ch; line-height:1.5;}
+
+  .theme-toggle{
+    position:fixed; top:16px; right:16px; z-index:60;
+    width:38px; height:38px; border-radius:50%;
+    background:var(--panel-bg); border:1px solid var(--panel-border); color:var(--panel-text);
+    font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+  }
+  .theme-toggle:hover{ filter:brightness(1.1); }
 
   .toolbar{
     display:flex; flex-wrap:wrap; gap:10px; align-items:center;
@@ -60,10 +100,10 @@
   }
   .search{
     flex:1 1 220px; min-width:160px;
-    background:#26332A; border:1px solid #3A4438; border-radius:10px;
-    padding:11px 14px; color:#F3EFE2; font-size:14.5px; font-family:'Karla',sans-serif;
+    background:var(--panel-bg); border:1px solid var(--panel-border); border-radius:10px;
+    padding:11px 14px; color:var(--panel-text); font-size:14.5px; font-family:'Karla',sans-serif;
   }
-  .search::placeholder{ color:#8E8B78; }
+  .search::placeholder{ color:var(--panel-placeholder); }
   .search:focus{ outline:2px solid var(--ring); outline-offset:1px; border-color:transparent;}
 
   .btn{
@@ -76,8 +116,8 @@
   .btn:disabled{ opacity:.6; cursor:default; }
   .btn-primary{ background: var(--mustard); color:#251C0B; }
   .btn-primary:hover{ filter:brightness(1.07); }
-  .btn-ghost{ background:transparent; color:#E7E1CE; border:1px solid #454F41; }
-  .btn-ghost:hover{ background:#2B372D; }
+  .btn-ghost{ background:transparent; color:var(--ghost-text); border:1px solid var(--line); }
+  .btn-ghost:hover{ background:var(--ghost-hover); }
   .btn-secondary{ background:#EFE7CE; color:#5E4E22; border:1px solid #DAC98A; }
   .btn-secondary:hover{ background:#E6DCB8; }
   .btn-danger{ background:transparent; color:#E7A891; border:1px solid #5A342A; }
@@ -86,7 +126,7 @@
   .tagbar{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:26px; }
   .chip{
     font-family:'IBM Plex Mono', monospace; font-size:11.5px; letter-spacing:.03em;
-    padding:6px 11px; border-radius:20px; border:1px solid #454F41; color:#CFC9B6;
+    padding:6px 11px; border-radius:20px; border:1px solid var(--line); color:var(--label-muted);
     background:transparent; cursor:pointer; text-transform:uppercase;
   }
   .chip.active{ background:var(--mustard); border-color:var(--mustard); color:#251C0B; }
@@ -97,11 +137,11 @@
     gap: 22px;
   }
   .empty, .err-box{
-    grid-column: 1/-1; text-align:center; padding: 60px 20px; color:#A7A188;
+    grid-column: 1/-1; text-align:center; padding: 60px 20px; color:var(--muted);
     font-family:'Fraunces',serif; font-size:19px;
   }
-  .empty span, .err-box span{ display:block; font-family:'Karla',sans-serif; font-size:13.5px; margin-top:8px; color:#8E8B78;}
-  .err-box{ color:#E7A891; }
+  .empty span, .err-box span{ display:block; font-family:'Karla',sans-serif; font-size:13.5px; margin-top:8px; color:var(--panel-placeholder);}
+  .err-box{ color:var(--err); }
 
   .card{
     position:relative; background:var(--card); color:var(--ink);
@@ -122,6 +162,14 @@
     background: radial-gradient(circle at 35% 30%, #d8cfb4, var(--pin));
     box-shadow: 0 2px 3px rgba(0,0,0,.35);
   }
+  .fav-btn{
+    position:absolute; top:10px; right:10px; width:30px; height:30px; border-radius:50%;
+    background:rgba(255,253,246,0.85); border:1px solid var(--card-edge); color:#C9BFA0;
+    font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    transition: color .12s ease, transform .12s ease;
+  }
+  .fav-btn:hover{ transform:scale(1.08); }
+  .fav-btn.active{ color: var(--brick); }
   .card-thumb{
     width:100%; height:120px; object-fit:cover; border-radius:2px; margin-bottom:10px;
     filter: saturate(0.98);
@@ -223,7 +271,7 @@
   .detail-text{ white-space:pre-wrap; line-height:1.6; font-size:14.5px; color:#3A362C; margin-top:6px; }
   .detail-date{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#9C947C; margin-top:18px; }
 
-  .loading{ grid-column: 1/-1; text-align:center; padding:60px 10px; color:#B7B199; font-family:'Karla',sans-serif; }
+  .loading{ grid-column: 1/-1; text-align:center; padding:60px 10px; color:var(--whoami-text); font-family:'Karla',sans-serif; }
 
   /* Lightbox */
   .lightbox{
@@ -248,7 +296,7 @@
     position:absolute; top:14px; right:16px; background:none; border:none;
     color:#FBF6E9; font-size:26px; cursor:pointer; padding:6px;
   }
-  .lightbox-hint{ color:#A7A188; font-size:12px; font-family:'Karla',sans-serif; padding-bottom:4px; }
+  .lightbox-hint{ color:var(--muted); font-size:12px; font-family:'Karla',sans-serif; padding-bottom:4px; }
 
   /* Tag manager */
   .tagrow{
@@ -297,25 +345,25 @@
   .chooser-card{ max-width:420px; width:100%; }
   .user-list{ display:flex; flex-direction:column; gap:10px; margin-top:20px; }
   .user-btn{
-    text-align:left; background:#26332A; border:1px solid #3A4438; border-radius:10px;
-    padding:14px 16px; color:#F3EFE2; font-family:'Fraunces',serif; font-size:17px; cursor:pointer;
+    text-align:left; background:var(--panel-bg); border:1px solid var(--panel-border); border-radius:10px;
+    padding:14px 16px; color:var(--panel-text); font-family:'Fraunces',serif; font-size:17px; cursor:pointer;
   }
-  .user-btn:hover{ background:#2B372D; }
+  .user-btn:hover{ background:var(--ghost-hover); }
   .whoami{
-    display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13px; color:#B7B199; margin-top:2px;
+    display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13px; color:var(--whoami-text); margin-top:2px;
   }
   .whoami button{
     background:none; border:none; color:var(--mustard); text-decoration:underline; cursor:pointer;
     font-family:'Karla',sans-serif; font-size:13px; padding:0;
   }
   .whoami input[type=text]{
-    background:#26332A; border:1px solid #3A4438; border-radius:6px; color:#F3EFE2;
+    background:var(--panel-bg); border:1px solid var(--panel-border); border-radius:6px; color:var(--panel-text);
     font-family:'Karla',sans-serif; font-size:13px; padding:5px 9px; width:160px;
   }
   .scope-toggle{ display:flex; gap:6px; }
   .scope-btn{
     font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:.03em; text-transform:uppercase;
-    padding:9px 13px; border-radius:8px; border:1px solid #454F41; color:#CFC9B6;
+    padding:9px 13px; border-radius:8px; border:1px solid var(--line); color:var(--label-muted);
     background:transparent; cursor:pointer;
   }
   .scope-btn.active{ background:var(--mustard); border-color:var(--mustard); color:#251C0B; }
@@ -340,9 +388,11 @@
       <input type="text" id="newUserInput" placeholder="Nytt namn, t.ex. Anna">
       <button class="btn btn-primary" id="createUserBtn" type="button">Skapa</button>
     </div>
-    <div id="chooserError" style="display:none; color:#E7A891; font-size:13.5px; margin-top:10px;"></div>
+    <div id="chooserError" style="display:none; color:var(--err); font-size:13.5px; margin-top:10px;"></div>
   </div>
 </div>
+
+<button class="theme-toggle" id="themeToggleBtn" type="button" aria-label="Växla mellan mörkt och ljust läge">🌙</button>
 
 <div class="wrap" id="app" style="display:none;">
   <header class="top">
@@ -353,7 +403,7 @@
   </header>
 
   <div class="toolbar">
-    <input class="search" id="searchInput" type="text" placeholder="Sök på receptnamn…">
+    <input class="search" id="searchInput" type="text" placeholder="Sök på receptnamn eller anteckning…">
     <select class="search" id="sortSelect" style="flex:0 0 auto; min-width:150px; cursor:pointer;">
       <option value="recent">Senast tillagda</option>
       <option value="alpha">Bokstavsordning (A–Ö)</option>
@@ -362,6 +412,7 @@
     <div class="scope-toggle">
       <button class="scope-btn active" id="scopeAll" type="button">Alla recept</button>
       <button class="scope-btn" id="scopeMine" type="button">Mina recept</button>
+      <button class="scope-btn" id="scopeFavorites" type="button">Favoriter</button>
     </div>
     <button class="btn btn-ghost" id="manageTagsBtn">Hantera taggar</button>
     <button class="btn btn-ghost" id="exploreBtn">Fler recept</button>
@@ -396,6 +447,26 @@ window.addEventListener('unhandledrejection', (e) => {
   if(grid) grid.innerHTML = `<div class="err-box">Något gick fel.<span>${(e.reason && e.reason.message) || e.reason || 'Okänt fel'}</span></div>`;
 });
 
+function loadThemePreference(){
+  try{ return localStorage.getItem('receptladan_theme'); }catch(e){ return null; }
+}
+function saveThemePreference(theme){
+  try{ localStorage.setItem('receptladan_theme', theme); }catch(e){ /* ignore */ }
+}
+function applyTheme(theme){
+  document.documentElement.setAttribute('data-theme', theme);
+  const btn = document.getElementById('themeToggleBtn');
+  if(btn) btn.textContent = theme === 'light' ? '☀️' : '🌙';
+}
+const initialTheme = loadThemePreference()
+  || (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+applyTheme(initialTheme);
+document.getElementById('themeToggleBtn').onclick = () => {
+  const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+  applyTheme(next);
+  saveThemePreference(next);
+};
+
 const DEFAULT_TAGS = ["Förrätt","Huvudrätt","Efterrätt","Fisk","Kött","Vegetariskt","Bakning","Snabbmat"];
 
 const RECIPE_SITES = [
@@ -420,8 +491,9 @@ let recipes = [];
 let allTags = []; // [{id, name}]
 let allUsers = []; // [{id, name}]
 let ratings = []; // [{id, recipe_id, user_id, rating}]
+let favorites = []; // [{id, recipe_id, user_id}]
 let currentUser = null; // {id, name}
-let viewScope = 'all'; // 'all' | 'mine'
+let viewScope = 'all'; // 'all' | 'mine' | 'favorites'
 let sortMode = 'recent'; // 'recent' | 'alpha' | 'rating'
 let activeTagFilters = new Set();
 let searchTerm = "";
@@ -480,6 +552,30 @@ function ratingStatsFor(recipeId){
   if(!rs.length) return { avg: 0, count: 0 };
   const avg = rs.reduce((s,x) => s + x.rating, 0) / rs.length;
   return { avg, count: rs.length };
+}
+
+async function loadFavorites(){
+  const { data, error } = await sb.from('favorites').select('*');
+  favorites = error ? [] : (data || []);
+}
+
+function isFavorited(recipeId){
+  return !!(currentUser && favorites.some(f => f.recipe_id === recipeId && f.user_id === currentUser.id));
+}
+
+async function toggleFavorite(recipeId){
+  if(!currentUser) return;
+  const existing = favorites.find(f => f.recipe_id === recipeId && f.user_id === currentUser.id);
+  let error;
+  if(existing){
+    ({ error } = await sb.from('favorites').delete().eq('id', existing.id));
+  }else{
+    ({ error } = await sb.from('favorites').insert([{ recipe_id: recipeId, user_id: currentUser.id }]));
+  }
+  if(error) return;
+  await loadFavorites();
+  renderGrid();
+  if(document.getElementById('ovDetail')) openDetail(recipeId);
 }
 
 function myRatingFor(recipeId){
@@ -606,10 +702,12 @@ document.getElementById('createUserBtn').onclick = async () => {
 
 document.getElementById('scopeAll').onclick = () => setScope('all');
 document.getElementById('scopeMine').onclick = () => setScope('mine');
+document.getElementById('scopeFavorites').onclick = () => setScope('favorites');
 function setScope(scope){
   viewScope = scope;
   document.getElementById('scopeAll').classList.toggle('active', scope === 'all');
   document.getElementById('scopeMine').classList.toggle('active', scope === 'mine');
+  document.getElementById('scopeFavorites').classList.toggle('active', scope === 'favorites');
   renderGrid();
 }
 
@@ -638,6 +736,7 @@ async function loadRecipes(){
   recipes = data || [];
   await loadTags();
   await loadRatings();
+  await loadFavorites();
   renderTagBar();
   renderGrid();
 }
@@ -664,10 +763,14 @@ function renderTagBar(){
 }
 
 function matchesFilters(r){
-  const nameOk = r.name.toLowerCase().includes(searchTerm.toLowerCase());
+  const term = searchTerm.toLowerCase();
+  const textOk = !term || r.name.toLowerCase().includes(term) || (r.note || '').toLowerCase().includes(term);
   const tagOk = activeTagFilters.size === 0 || (r.tags||[]).some(t => activeTagFilters.has(t));
-  const scopeOk = viewScope === 'all' || r.owner_id === (currentUser && currentUser.id);
-  return nameOk && tagOk && scopeOk;
+  let scopeOk;
+  if(viewScope === 'mine') scopeOk = r.owner_id === (currentUser && currentUser.id);
+  else if(viewScope === 'favorites') scopeOk = isFavorited(r.id);
+  else scopeOk = true;
+  return textOk && tagOk && scopeOk;
 }
 
 function snippetFor(r){
@@ -715,9 +818,10 @@ function renderGrid(){
     card.tabIndex = 0;
     card.setAttribute('role','button');
     card.onclick = () => openDetail(r.id);
-    card.onkeydown = (e) => { if(e.key === 'Enter') openDetail(r.id); };
+    card.onkeydown = (e) => { if(e.key === 'Enter' && e.target === card) openDetail(r.id); };
     card.innerHTML = `
       <div class="pin"></div>
+      <button class="fav-btn${isFavorited(r.id) ? ' active' : ''}" type="button" aria-label="${isFavorited(r.id) ? 'Ta bort favorit' : 'Lägg till favorit'}">${isFavorited(r.id) ? '♥' : '♡'}</button>
       ${imgs[0] ? `<div style="position:relative;"><img class="card-thumb" src="${imgs[0]}" alt="">${imgs.length > 1 ? `<span class="tag-pill" style="position:absolute; bottom:6px; right:6px; background:#2A2620; color:#FBF6E9; border-color:#2A2620;">+${imgs.length - 1}</span>` : ''}</div>` : ''}
       <div class="card-name">${escapeHtml(r.name)}</div>
       <div class="card-owner">${escapeHtml(ownerName(r.owner_id))}s recept</div>
@@ -726,6 +830,7 @@ function renderGrid(){
       <div class="card-snippet">${escapeHtml(snippetFor(r))}</div>
       <div class="card-source">${r.link ? '🔗 länk' : ''} ${imgs.length ? '🖼 bild' : ''} ${(!r.link && !imgs.length) ? '📝 anteckning' : ''}</div>
     `;
+    card.querySelector('.fav-btn').onclick = (e) => { e.stopPropagation(); toggleFavorite(r.id); };
     grid.appendChild(card);
   });
 }
@@ -751,6 +856,7 @@ function openDetail(id){
     <div class="overlay" id="ovDetail">
       <div class="modal">
         <button class="modal-close" id="closeDetail" aria-label="Stäng">✕</button>
+        <button class="modal-close" id="favToggleDetail" type="button" style="color:${isFavorited(r.id) ? 'var(--brick)' : 'var(--ink-soft)'};" aria-label="${isFavorited(r.id) ? 'Ta bort favorit' : 'Lägg till favorit'}">${isFavorited(r.id) ? '♥' : '♡'}</button>
         <div class="detail-owner">${escapeHtml(ownerName(r.owner_id))}s recept</div>
         <h2>${escapeHtml(r.name)}</h2>
         <div class="detail-tags">${(r.tags||[]).map(t=>`<span class="tag-pill">${escapeHtml(t)}</span>`).join('')}</div>
@@ -779,6 +885,7 @@ function openDetail(id){
   `;
   document.getElementById('closeDetail').onclick = closeModal;
   document.getElementById('ovDetail').onclick = (e) => { if(e.target.id === 'ovDetail') closeModal(); };
+  document.getElementById('favToggleDetail').onclick = () => toggleFavorite(r.id);
   document.getElementById('findSimilarBtn').onclick = () => openExplore(r.name);
   modalRoot.querySelectorAll('#myStars .star-btn').forEach(btn => {
     btn.onclick = () => setMyRating(r.id, Number(btn.dataset.val));
