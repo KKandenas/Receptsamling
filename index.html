@@ -324,6 +324,12 @@
   .shop-item.checked label{ text-decoration:line-through; color:var(--ink-soft); }
   .shop-missing{ font-size:13px; color:var(--ink-soft); font-style:italic; }
   .detail-date{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#9C947C; margin-top:18px; }
+  .comment-item{ padding:10px 0; border-bottom:1px solid #EDE4CC; }
+  .comment-meta{ display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+  .comment-author{ font-weight:700; font-size:13px; color:var(--ink); }
+  .comment-date{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#9C947C; flex:0 0 auto; }
+  .comment-text{ font-size:14px; line-height:1.5; margin-top:3px; color:#3A362C; white-space:pre-wrap; }
+  .comment-delete{ background:none; border:none; color:var(--brick); font-size:12px; cursor:pointer; padding:4px 0 0; }
 
   .loading{ grid-column: 1/-1; text-align:center; padding:60px 10px; color:var(--whoami-text); font-family:'Karla',sans-serif; }
 
@@ -584,6 +590,7 @@ let allTags = []; // [{id, name}]
 let allUsers = []; // [{id, name}]
 let ratings = []; // [{id, recipe_id, user_id, rating}]
 let favorites = []; // [{id, recipe_id, user_id}]
+let comments = []; // [{id, recipe_id, user_id, text, created_at}]
 let currentUser = null; // {id, name}
 let viewScope = 'all'; // 'all' | 'mine' | 'favorites'
 let sortMode = 'recent'; // 'recent' | 'alpha' | 'rating'
@@ -649,6 +656,31 @@ function ratingStatsFor(recipeId){
 async function loadFavorites(){
   const { data, error } = await sb.from('favorites').select('*');
   favorites = error ? [] : (data || []);
+}
+
+async function loadComments(){
+  const { data, error } = await sb.from('comments').select('*').order('created_at', { ascending: true });
+  comments = error ? [] : (data || []);
+}
+
+function commentsFor(recipeId){
+  return comments.filter(c => c.recipe_id === recipeId);
+}
+
+async function addComment(recipeId, text){
+  if(!currentUser || !text.trim()) return false;
+  const { error } = await sb.from('comments').insert([{ recipe_id: recipeId, user_id: currentUser.id, text: text.trim() }]);
+  if(error) return false;
+  await loadComments();
+  if(document.getElementById('ovDetail')) openDetail(recipeId);
+  return true;
+}
+
+async function deleteComment(commentId, recipeId){
+  const { error } = await sb.from('comments').delete().eq('id', commentId);
+  if(error) return;
+  await loadComments();
+  if(document.getElementById('ovDetail')) openDetail(recipeId);
 }
 
 function isFavorited(recipeId){
@@ -1133,6 +1165,7 @@ async function loadRecipes(){
   await loadTags();
   await loadRatings();
   await loadFavorites();
+  await loadComments();
   renderTagBar();
   renderGrid();
 }
@@ -1320,6 +1353,21 @@ function recordView(recipeId){
     .then(({ error }) => { if(error) console.error('Kunde inte uppdatera visningsstatistik:', error.message); });
 }
 
+function commentsListHtml(recipeId){
+  const list = commentsFor(recipeId);
+  if(!list.length) return `<p style="color:var(--ink-soft); font-size:13.5px;">Inga kommentarer än.</p>`;
+  return list.map(c => `
+    <div class="comment-item">
+      <div class="comment-meta">
+        <span class="comment-author">${escapeHtml(ownerName(c.user_id))}</span>
+        <span class="comment-date">${new Date(c.created_at).toLocaleDateString('sv-SE', { day:'numeric', month:'short' })}</span>
+      </div>
+      <div class="comment-text">${escapeHtml(c.text)}</div>
+      ${currentUser && c.user_id === currentUser.id ? `<button class="comment-delete" type="button" data-id="${c.id}">Ta bort</button>` : ''}
+    </div>
+  `).join('');
+}
+
 function openDetail(id){
   const r = recipes.find(x => x.id === id);
   if(!r) return;
@@ -1349,6 +1397,12 @@ function openDetail(id){
         ${r.ingredients && r.ingredients.length ? `<div class="detail-rating-label" style="margin-top:14px;">Ingredienser</div><ul class="detail-ingredients">${r.ingredients.map(ing => `<li>${escapeHtml(ing)}</li>`).join('')}</ul>` : ''}
         ${r.note ? `<div class="detail-text">${escapeHtml(r.note)}</div>` : ''}
         <div class="detail-date">Sparat ${new Date(r.created_at).toLocaleDateString('sv-SE', {year:'numeric', month:'long', day:'numeric'})}</div>
+        <div class="detail-rating-label" style="margin-top:20px;">Kommentarer</div>
+        <div id="commentsList">${commentsListHtml(r.id)}</div>
+        <div class="field" style="margin-top:10px;">
+          <textarea id="newCommentText" placeholder="Skriv en kommentar…" style="min-height:60px;"></textarea>
+          <button class="btn btn-secondary" id="addCommentBtn" type="button" style="margin-top:8px;">Kommentera</button>
+        </div>
         <div id="detailError" style="display:none; color:#A8432B; font-size:13.5px; margin-bottom:10px; font-weight:600;"></div>
         <div class="modal-actions">
           ${isMine
@@ -1370,6 +1424,23 @@ function openDetail(id){
   modalRoot.querySelectorAll('.detail-gallery img').forEach(img => {
     img.onclick = () => openLightbox(galleryImgs, Number(img.dataset.idx));
   });
+  modalRoot.querySelectorAll('.comment-delete').forEach(btn => {
+    btn.onclick = () => deleteComment(btn.dataset.id, r.id);
+  });
+  document.getElementById('addCommentBtn').onclick = async () => {
+    const textarea = document.getElementById('newCommentText');
+    const text = textarea.value.trim();
+    if(!text) return;
+    const btn = document.getElementById('addCommentBtn');
+    const detailError = document.getElementById('detailError');
+    btn.disabled = true; btn.textContent = 'Skickar…';
+    const ok = await addComment(r.id, text);
+    if(!ok){
+      btn.disabled = false; btn.textContent = 'Kommentera';
+      detailError.textContent = 'Kunde inte spara kommentaren.';
+      detailError.style.display = '';
+    }
+  };
 
   if(isMine){
     const deleteBtn = document.getElementById('deleteBtn');
