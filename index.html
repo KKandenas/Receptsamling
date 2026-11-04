@@ -871,6 +871,22 @@ function saveShoppingChecked(weekKey, checked){
   try{ localStorage.setItem('receptladan_shop_' + weekKey, JSON.stringify(Array.from(checked))); }catch(e){ /* ignore */ }
 }
 
+function shopItemsHtml(recipe, checked){
+  if(!(recipe.ingredients && recipe.ingredients.length)){
+    return `<div class="shop-missing">Inga sparade ingredienser — kolla receptet manuellt.</div>`;
+  }
+  const items = recipe.ingredients.map((ing, idx) => ({ ing, key: recipe.id + '::' + idx }));
+  // Bockade ingredienser sjunker till botten (stabil sort bevarar ordningen inom varje grupp).
+  items.sort((a, b) => (checked.has(a.key) ? 1 : 0) - (checked.has(b.key) ? 1 : 0));
+  return items.map(({ ing, key }) => {
+    const isChecked = checked.has(key);
+    return `<div class="shop-item${isChecked ? ' checked' : ''}">
+      <input type="checkbox" id="shop-${key}" data-key="${key}" ${isChecked ? 'checked' : ''}>
+      <label for="shop-${key}">${escapeHtml(ing)}</label>
+    </div>`;
+  }).join('');
+}
+
 function openShoppingList(){
   const weekKey = isoDate(planWeekStart);
   const checked = loadShoppingChecked(weekKey);
@@ -898,17 +914,7 @@ function openShoppingList(){
         ${weekRecipes.length === 0 ? `<p style="color:var(--ink-soft); font-size:14px;">Inga recept inplanerade den här veckan än.</p>` : weekRecipes.map(r => `
           <div class="shop-section">
             <div class="shop-section-title">${escapeHtml(r.name)}</div>
-            ${r.ingredients && r.ingredients.length
-              ? r.ingredients.map((ing, idx) => {
-                  const key = r.id + '::' + idx;
-                  const isChecked = checked.has(key);
-                  return `<div class="shop-item${isChecked ? ' checked' : ''}">
-                    <input type="checkbox" id="shop-${key}" data-key="${key}" ${isChecked ? 'checked' : ''}>
-                    <label for="shop-${key}">${escapeHtml(ing)}</label>
-                  </div>`;
-                }).join('')
-              : `<div class="shop-missing">Inga sparade ingredienser — kolla receptet manuellt.</div>`
-            }
+            <div class="shop-items" id="shop-items-${r.id}">${shopItemsHtml(r, checked)}</div>
           </div>
         `).join('')}
       </div>
@@ -916,14 +922,24 @@ function openShoppingList(){
   `;
   document.getElementById('closeShop').onclick = closeModal;
   document.getElementById('ovShop').onclick = (e) => { if(e.target.id === 'ovShop') closeModal(); };
-  modalRoot.querySelectorAll('.shop-item input[type=checkbox]').forEach(cb => {
-    cb.onchange = () => {
-      const key = cb.dataset.key;
-      if(cb.checked) checked.add(key); else checked.delete(key);
-      saveShoppingChecked(weekKey, checked);
-      cb.closest('.shop-item').classList.toggle('checked', cb.checked);
-    };
-  });
+
+  function bindShopCheckboxes(){
+    modalRoot.querySelectorAll('.shop-item input[type=checkbox]').forEach(cb => {
+      cb.onchange = () => {
+        const key = cb.dataset.key;
+        const recipeId = key.split('::')[0];
+        if(cb.checked) checked.add(key); else checked.delete(key);
+        saveShoppingChecked(weekKey, checked);
+        const recipe = weekRecipes.find(r => r.id === recipeId);
+        const container = document.getElementById('shop-items-' + recipeId);
+        if(recipe && container){
+          container.innerHTML = shopItemsHtml(recipe, checked);
+          bindShopCheckboxes();
+        }
+      };
+    });
+  }
+  bindShopCheckboxes();
 }
 
 function renderWeekPlanGrid(){
