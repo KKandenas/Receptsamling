@@ -440,43 +440,6 @@
     color:#9C947C; margin-bottom:6px;
   }
 
-  #printWeekPlanArea{ display:none; }
-  @media print{
-    @page{ size: landscape; margin:10mm; }
-    body > *{ display:none !important; }
-    #printWeekPlanArea{ display:block !important; }
-  }
-  #printWeekPlanArea *{ box-sizing:border-box; }
-  #printWeekPlanArea{ font-family:'Karla',sans-serif; color:#2A2620; background:#FBF6E9; }
-  #printWeekPlanArea .page{ width:100%; min-height:100vh; padding:16px 10px; background:#FBF6E9; display:flex; flex-direction:column; page-break-after:always; }
-  #printWeekPlanArea .page:last-of-type{ page-break-after:auto; }
-  #printWeekPlanArea .page-header{ display:flex; justify-content:space-between; align-items:baseline; padding-bottom:14px; border-bottom:2px solid #2A2620; }
-  #printWeekPlanArea .brand{ font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:#B98526; }
-  #printWeekPlanArea .title{ font-family:'Fraunces',serif; font-weight:600; font-size:22px; margin-left:10px; }
-  #printWeekPlanArea .meta{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:#6B6455; }
-  #printWeekPlanArea .page-footer{ padding-top:14px; border-top:1px solid #EDE4CC; font-family:'IBM Plex Mono',monospace; font-size:9px; color:#9C947C; }
-  #printWeekPlanArea .cols{ display:flex; flex:1 1 auto; min-height:0; padding-top:18px; }
-  #printWeekPlanArea .col{ flex:1 1 0; min-width:0; padding:18px 22px 0 22px; border-right:1px solid #DED2AC; display:flex; flex-direction:column; }
-  #printWeekPlanArea .col:first-child{ padding-left:0; }
-  #printWeekPlanArea .col:last-child{ border-right:none; }
-  #printWeekPlanArea .col-heading{ font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:#9C947C; margin-bottom:10px; }
-  #printWeekPlanArea .summary-row{ padding:7px 0; border-bottom:1px solid #EFE7CE; }
-  #printWeekPlanArea .summary-row:last-child{ border-bottom:none; }
-  #printWeekPlanArea .summary-day{ font-family:'IBM Plex Mono',monospace; font-size:9.5px; font-weight:700; color:#B98526; text-transform:uppercase; }
-  #printWeekPlanArea .summary-day-empty{ color:#9C947C; }
-  #printWeekPlanArea .summary-name{ font-size:12.5px; margin-top:1px; }
-  #printWeekPlanArea .summary-empty{ font-style:italic; color:#B3A290; }
-  #printWeekPlanArea .daylabel{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:#B98526; }
-  #printWeekPlanArea .recipename{ font-family:'Fraunces',serif; font-weight:600; font-size:16.5px; line-height:1.25; margin-top:8px; }
-  #printWeekPlanArea .tagrow{ display:flex; flex-wrap:wrap; gap:6px; margin:7px 0 2px; }
-  #printWeekPlanArea .tag{ font-family:'IBM Plex Mono',monospace; font-size:8.5px; text-transform:uppercase; padding:2px 7px; border-radius:9px; background:#EFE7CE; color:#6B5A2E; border:1px solid #E0D3A8; }
-  #printWeekPlanArea .shoplabel{ font-family:'IBM Plex Mono',monospace; font-size:9px; letter-spacing:.06em; text-transform:uppercase; color:#9C947C; border-top:1px solid #DED2AC; padding-top:10px; margin-top:12px; margin-bottom:10px; }
-  #printWeekPlanArea .item{ display:flex; align-items:flex-start; font-size:12.5px; line-height:1.35; }
-  #printWeekPlanArea .box{ display:inline-block; width:12px; height:12px; border:1.3px solid #2A2620; border-radius:3px; margin-right:9px; margin-top:2px; flex:0 0 auto; }
-  #printWeekPlanArea .missing{ font-size:12px; font-style:italic; color:#9C947C; }
-  #printWeekPlanArea .photo{ width:100%; height:130px; border-radius:3px; overflow:hidden; background:#EFE7CE; border:1px solid #DED2AC; margin-bottom:12px; }
-  #printWeekPlanArea .photo img{ width:100%; height:100%; object-fit:cover; display:block; }
-  #printWeekPlanArea .empty-day{ font-family:'Fraunces',serif; font-style:italic; font-size:16px; color:#B3A290; margin-top:8px; }
 </style>
 </head>
 <body>
@@ -551,7 +514,7 @@
     <button class="btn btn-ghost" id="planNextWeek" type="button">Nästa ›</button>
     <button class="btn btn-secondary" id="planRandomize" type="button">🎲 Slumpa förslag</button>
     <button class="btn btn-ghost" id="planShoppingList" type="button">🛒 Inköpslista</button>
-    <button class="btn btn-ghost" id="planPrint" type="button">🖨 Skriv ut</button>
+    <button class="btn btn-ghost" id="planPrint" type="button">🖨 Ladda ner PDF</button>
     <div class="dropdown-wrap">
       <button class="btn btn-ghost" id="planTagFilterBtn" type="button" aria-haspopup="true" aria-expanded="false">🚫 Uteslut taggar<span class="tagfilter-count" id="planTagFilterCount" style="display:none;"></span></button>
       <div class="dropdown-panel" id="planTagFilterPanel">
@@ -567,7 +530,6 @@
 </div>
 
 <div id="modalRoot"></div>
-<div id="printWeekPlanArea"></div>
 
 <script type="module">
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
@@ -1017,84 +979,193 @@ function openShoppingList(){
   bindShopCheckboxes();
 }
 
-function printWeekPlanIngredientsHtml(recipe){
-  if(!(recipe.ingredients && recipe.ingredients.length)){
-    return `<div class="missing">Inga sparade ingredienser &mdash; kolla receptet manuellt.</div>`;
-  }
-  return `<div style="display:flex; flex-direction:column; gap:8px;">${recipe.ingredients.map(ing =>
-    `<div class="item"><span class="box"></span>${escapeHtml(ing)}</div>`
-  ).join('')}</div>`;
-}
+const PDF_COLOR = {
+  ink: [42, 38, 32], inkSoft: [107, 100, 85], mustardDeep: [185, 133, 38],
+  tagBg: [239, 231, 206], tagBorder: [224, 211, 168], tagText: [107, 90, 46],
+  muted: [156, 148, 124], mutedLight: [179, 162, 144], divider: [222, 210, 172], dividerLight: [237, 228, 204],
+};
 
-function printWeekPlanDayColumnHtml(day){
-  const dateLabel = `${day.date.getDate()}/${day.date.getMonth() + 1}`;
+function drawWeekPlanPdfDayColumn(doc, day, x, width, top){
+  let cy = top;
+  doc.setFont('courier', 'bold'); doc.setFontSize(9);
+  doc.setTextColor(...PDF_COLOR.mustardDeep);
+  doc.text(`${day.dayFull} ${day.date.getDate()}/${day.date.getMonth() + 1}`, x, cy);
+  cy += 16;
+
   if(!day.recipe){
-    return `<div class="col"><div class="daylabel">${escapeHtml(day.dayFull)} ${dateLabel}</div><div class="empty-day">Inget inplanerat</div></div>`;
+    doc.setFont('times', 'italic'); doc.setFontSize(13);
+    doc.setTextColor(...PDF_COLOR.mutedLight);
+    doc.text('Inget inplanerat', x, cy + 8);
+    return;
   }
   const r = day.recipe;
+
   const img = imagesOf(r)[0];
-  return `
-    <div class="col">
-      <div class="daylabel">${escapeHtml(day.dayFull)} ${dateLabel}</div>
-      ${img ? `<div class="photo"><img src="${img}" alt=""></div>` : ''}
-      <div class="recipename">${escapeHtml(r.name)}</div>
-      ${(r.tags && r.tags.length) ? `<div class="tagrow">${r.tags.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
-      <div class="shoplabel">Inköpslista</div>
-      ${printWeekPlanIngredientsHtml(r)}
-    </div>
-  `;
-}
-
-function buildWeekPlanPrintHtml(){
-  const days = [];
-  for(let i = 0; i < 7; i++){
-    const date = addDays(planWeekStart, i);
-    const dateStr = isoDate(date);
-    const entry = mealPlan.find(p => p.plan_date === dateStr);
-    const recipe = entry ? recipes.find(r => r.id === entry.recipe_id) : null;
-    days.push({ date, dayAbbrev: WEEKDAY_NAMES[i], dayFull: WEEKDAY_FULL_NAMES[i], recipe });
+  if(img && img.startsWith('data:image')){
+    try{
+      const props = doc.getImageProperties(img);
+      let imgW = width;
+      let imgH = imgW * (props.height / props.width);
+      const maxH = 85;
+      if(imgH > maxH){ imgH = maxH; imgW = imgH * (props.width / props.height); }
+      doc.addImage(img, x + (width - imgW) / 2, cy, imgW, imgH);
+      cy += imgH + 10;
+    }catch(e){ /* skadad bild – hoppa över */ }
   }
 
-  const weekEnd = addDays(planWeekStart, 6);
-  const rangeLabel = `${planWeekStart.toLocaleDateString('sv-SE', { day:'numeric', month:'long' })} &ndash; ${weekEnd.toLocaleDateString('sv-SE', { day:'numeric', month:'long', year:'numeric' })}`;
-  const printedLabel = new Date().toLocaleDateString('sv-SE', { day:'numeric', month:'long', year:'numeric' });
+  doc.setFont('times', 'bold'); doc.setFontSize(13);
+  doc.setTextColor(...PDF_COLOR.ink);
+  const nameLines = doc.splitTextToSize(r.name, width);
+  doc.text(nameLines, x, cy + 10);
+  cy += nameLines.length * 14 + 6;
 
-  const summaryColHtml = `
-    <div class="col">
-      <div class="col-heading">Hela veckan</div>
-      ${days.map(d => `
-        <div class="summary-row">
-          <div class="summary-day${d.recipe ? '' : ' summary-day-empty'}">${escapeHtml(d.dayAbbrev)} ${d.date.getDate()}/${d.date.getMonth() + 1}</div>
-          <div class="summary-name${d.recipe ? '' : ' summary-empty'}">${d.recipe ? escapeHtml(d.recipe.name) : 'Inget inplanerat'}</div>
-        </div>
-      `).join('')}
-    </div>
-  `;
-
-  function pageHtml(colsHtml, pageNum, totalPages){
-    return `
-      <div class="page">
-        <div class="page-header">
-          <div><span class="brand">Receptlådan</span><span class="title">Veckoplan</span></div>
-          <div class="meta">${rangeLabel} &middot; Sida ${pageNum} av ${totalPages}</div>
-        </div>
-        <div class="cols">${colsHtml}</div>
-        <div class="page-footer">Utskriven ${escapeHtml(printedLabel)}</div>
-      </div>
-    `;
+  if(r.tags && r.tags.length){
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
+    let tx = x;
+    const tagRowH = 14;
+    r.tags.forEach(tag => {
+      const tw = doc.getTextWidth(tag.toUpperCase()) + 8;
+      if(tx + tw > x + width){ tx = x; cy += tagRowH; }
+      doc.setFillColor(...PDF_COLOR.tagBg);
+      doc.setDrawColor(...PDF_COLOR.tagBorder);
+      doc.roundedRect(tx, cy, tw, 11, 5, 5, 'FD');
+      doc.setTextColor(...PDF_COLOR.tagText);
+      doc.text(tag.toUpperCase(), tx + 4, cy + 7.5);
+      tx += tw + 5;
+    });
+    cy += tagRowH + 4;
   }
 
-  const page1 = pageHtml(summaryColHtml + days.slice(0, 3).map(printWeekPlanDayColumnHtml).join(''), 1, 2);
-  const page2 = pageHtml(days.slice(3, 7).map(printWeekPlanDayColumnHtml).join(''), 2, 2);
+  doc.setDrawColor(...PDF_COLOR.divider); doc.setLineWidth(0.6);
+  doc.line(x, cy, x + width, cy);
+  cy += 11;
+  doc.setFont('courier', 'normal'); doc.setFontSize(7.5);
+  doc.setTextColor(...PDF_COLOR.muted);
+  doc.text('INKÖPSLISTA', x, cy);
+  cy += 12;
 
-  return page1 + page2;
+  if(!(r.ingredients && r.ingredients.length)){
+    doc.setFont('times', 'italic'); doc.setFontSize(9);
+    doc.setTextColor(...PDF_COLOR.muted);
+    const lines = doc.splitTextToSize('Inga sparade ingredienser — kolla receptet manuellt.', width);
+    doc.text(lines, x, cy + 7);
+    return;
+  }
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5);
+  r.ingredients.forEach(ing => {
+    doc.setDrawColor(...PDF_COLOR.ink); doc.setLineWidth(0.6);
+    doc.rect(x, cy, 7, 7);
+    doc.setTextColor(...PDF_COLOR.ink);
+    const lines = doc.splitTextToSize(ing, width - 13);
+    doc.text(lines, x + 12, cy + 6);
+    cy += Math.max(lines.length * 11, 13) + 4;
+  });
 }
 
-function printWeekPlan(){
-  const area = document.getElementById('printWeekPlanArea');
-  area.innerHTML = buildWeekPlanPrintHtml();
-  window.print();
-  window.addEventListener('afterprint', () => { area.innerHTML = ''; }, { once: true });
+function drawWeekPlanPdfSummaryColumn(doc, days, x, width, top){
+  let cy = top;
+  doc.setFont('courier', 'bold'); doc.setFontSize(8.5);
+  doc.setTextColor(...PDF_COLOR.muted);
+  doc.text('HELA VECKAN', x, cy);
+  cy += 16;
+  days.forEach(d => {
+    doc.setFont('courier', 'bold'); doc.setFontSize(8.5);
+    doc.setTextColor(...(d.recipe ? PDF_COLOR.mustardDeep : PDF_COLOR.muted));
+    doc.text(`${d.dayAbbrev.toUpperCase()} ${d.date.getDate()}/${d.date.getMonth() + 1}`, x, cy);
+    cy += 11;
+    if(d.recipe){
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+      doc.setTextColor(...PDF_COLOR.ink);
+      doc.text(d.recipe.name, x, cy);
+    }else{
+      doc.setFont('times', 'italic'); doc.setFontSize(10);
+      doc.setTextColor(...PDF_COLOR.mutedLight);
+      doc.text('Inget inplanerat', x, cy);
+    }
+    cy += 8;
+    doc.setDrawColor(...PDF_COLOR.dividerLight); doc.setLineWidth(0.5);
+    doc.line(x, cy, x + width, cy);
+    cy += 10;
+  });
+}
+
+function drawWeekPlanPdfPage(doc, cols, rangeLabel, printedLabel, pageNum, totalPages){
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 26;
+
+  doc.setFont('courier', 'bold'); doc.setFontSize(9);
+  doc.setTextColor(...PDF_COLOR.mustardDeep);
+  doc.text('RECEPTLÅDAN', margin, margin + 6);
+  const brandW = doc.getTextWidth('RECEPTLÅDAN');
+  doc.setFont('times', 'bold'); doc.setFontSize(17);
+  doc.setTextColor(...PDF_COLOR.ink);
+  doc.text('Veckoplan', margin + brandW + 10, margin + 8);
+
+  doc.setFont('courier', 'normal'); doc.setFontSize(8.5);
+  doc.setTextColor(...PDF_COLOR.inkSoft);
+  doc.text(`${rangeLabel} · Sida ${pageNum} av ${totalPages}`, pageW - margin, margin + 6, { align: 'right' });
+
+  doc.setDrawColor(...PDF_COLOR.ink); doc.setLineWidth(1.2);
+  doc.line(margin, margin + 14, pageW - margin, margin + 14);
+
+  const colsTop = margin + 36;
+  const colsBottom = pageH - margin - 16;
+  const gap = 14;
+  const colWidth = (pageW - 2 * margin - (cols.length - 1) * gap) / cols.length;
+
+  cols.forEach((col, i) => {
+    const x = margin + i * (colWidth + gap);
+    if(i > 0){
+      doc.setDrawColor(...PDF_COLOR.divider); doc.setLineWidth(0.6);
+      doc.line(x - gap / 2, colsTop, x - gap / 2, colsBottom);
+    }
+    if(col.type === 'summary') drawWeekPlanPdfSummaryColumn(doc, col.days, x, colWidth, colsTop);
+    else drawWeekPlanPdfDayColumn(doc, col.day, x, colWidth, colsTop);
+  });
+
+  doc.setDrawColor(...PDF_COLOR.dividerLight); doc.setLineWidth(0.6);
+  doc.line(margin, pageH - margin - 8, pageW - margin, pageH - margin - 8);
+  doc.setFont('courier', 'normal'); doc.setFontSize(7);
+  doc.setTextColor(...PDF_COLOR.muted);
+  doc.text(`Utskriven ${printedLabel}`, margin, pageH - margin);
+}
+
+async function printWeekPlan(){
+  const btn = document.getElementById('planPrint');
+  const originalText = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Skapar PDF…';
+  try{
+    const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm');
+
+    const days = [];
+    for(let i = 0; i < 7; i++){
+      const date = addDays(planWeekStart, i);
+      const dateStr = isoDate(date);
+      const entry = mealPlan.find(p => p.plan_date === dateStr);
+      const recipe = entry ? recipes.find(r => r.id === entry.recipe_id) : null;
+      days.push({ date, dayAbbrev: WEEKDAY_NAMES[i], dayFull: WEEKDAY_FULL_NAMES[i], recipe });
+    }
+    const weekEnd = addDays(planWeekStart, 6);
+    const rangeLabel = `${planWeekStart.toLocaleDateString('sv-SE', { day:'numeric', month:'long' })} – ${weekEnd.toLocaleDateString('sv-SE', { day:'numeric', month:'long', year:'numeric' })}`;
+    const printedLabel = new Date().toLocaleDateString('sv-SE', { day:'numeric', month:'long', year:'numeric' });
+
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+    drawWeekPlanPdfPage(doc,
+      [{ type: 'summary', days }, ...days.slice(0, 3).map(day => ({ type: 'day', day }))],
+      rangeLabel, printedLabel, 1, 2);
+    doc.addPage();
+    drawWeekPlanPdfPage(doc,
+      days.slice(3, 7).map(day => ({ type: 'day', day })),
+      rangeLabel, printedLabel, 2, 2);
+
+    doc.save(`veckoplan-${isoDate(planWeekStart)}.pdf`);
+    btn.textContent = 'Klart ✓';
+  }catch(e){
+    console.error(e);
+    btn.textContent = 'Kunde inte skapa PDF';
+  }
+  setTimeout(() => { btn.disabled = false; btn.textContent = originalText; }, 2200);
 }
 
 function renderWeekPlanGrid(){
