@@ -19,7 +19,7 @@ Byggd som en enda fristående webbsida (`index.html`), värd gratis på GitHub P
 - **Favoriter** – hjärtmarkera vems recept som helst och hitta dem snabbt igen under "Favoriter", utan att behöva kopiera dem till din egen låda.
 - **Ljust/mörkt läge** – växla tema med knappen uppe i hörnet, valet sparas i din webbläsare.
 - **Veckoplanering** – planera din vecka med recept från hela receptlådan, eller låt "Slumpa förslag" fylla tomma dagar automatiskt (med viss variation om recepten är taggade t.ex. Fisk/Kött/Vegetariskt).
-- **Sök, filtrera och sortera** – sök på namn eller anteckningstext, filtrera på taggar, sortera på senast tillagda, bokstavsordning eller betyg.
+- **Sök, filtrera och sortera** – sök på namn eller anteckningstext, filtrera på taggar, sortera på senast tillagda, bokstavsordning, betyg, senast öppnad eller populärast (flest öppningar).
 - **Export** – exportera allt som en JSON-backup, eller som en snygg utskriftsvänlig PDF (med klickbara länkar), som respekterar aktiva filter.
 
 ---
@@ -70,14 +70,18 @@ create table if not exists recipes (
   images text[] default '{}',
   copied_from uuid references recipes(id) on delete set null,
   owner_id uuid references users(id),
-  created_at timestamptz default now()
+  created_at timestamptz default now(),
+  view_count integer not null default 0,
+  last_viewed_at timestamptz
 );
 alter table recipes enable row level security;
 create policy "allow all" on recipes for all using (true) with check (true);
 -- Om du redan hade recipes-tabellen sedan tidigare (t.ex. uppgraderar en befintlig
--- installation) skapar inte raderna ovan kolumnen — kör även denna rad, den är säker
--- att köra om (gör inget om kolumnen redan finns):
+-- installation) skapar inte raderna ovan kolumnerna — kör även dessa rader, de är
+-- säkra att köra om (gör inget om kolumnen redan finns):
 alter table recipes add column if not exists ingredients text[] default '{}';
+alter table recipes add column if not exists view_count integer not null default 0;
+alter table recipes add column if not exists last_viewed_at timestamptz;
 
 -- Betyg
 create table if not exists ratings (
