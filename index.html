@@ -1000,15 +1000,14 @@ function drawWeekPlanPdfDayColumn(doc, day, x, width, top){
   }
   const r = day.recipe;
 
-  const img = imagesOf(r)[0];
-  if(img && img.startsWith('data:image')){
+  if(day.resolvedImage){
+    const ri = day.resolvedImage;
     try{
-      const props = doc.getImageProperties(img);
       let imgW = width;
-      let imgH = imgW * (props.height / props.width);
+      let imgH = imgW * (ri.height / ri.width);
       const maxH = 85;
-      if(imgH > maxH){ imgH = maxH; imgW = imgH * (props.width / props.height); }
-      doc.addImage(img, x + (width - imgW) / 2, cy, imgW, imgH);
+      if(imgH > maxH){ imgH = maxH; imgW = imgH * (ri.width / ri.height); }
+      doc.addImage(ri.dataUrl, ri.format, x + (width - imgW) / 2, cy, imgW, imgH);
       cy += imgH + 10;
     }catch(e){ /* skadad bild – hoppa över */ }
   }
@@ -1131,6 +1130,44 @@ function drawWeekPlanPdfPage(doc, cols, rangeLabel, printedLabel, pageNum, total
   doc.text(`Utskriven ${printedLabel}`, margin, pageH - margin);
 }
 
+function loadImageDims(dataUrl){
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    img.onerror = () => resolve(null);
+    img.src = dataUrl;
+  });
+}
+
+async function resolveWeekPlanRecipeImage(r){
+  let src = imagesOf(r)[0];
+  if(!src) return null;
+  if(!src.startsWith('data:image')){
+    if(!/^https?:\/\//i.test(src)) return null;
+    try{
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      const res = await fetch(src, { signal: controller.signal });
+      clearTimeout(timeout);
+      if(!res.ok) return null;
+      const blob = await res.blob();
+      if(!/^image\//.test(blob.type)) return null;
+      src = await new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      });
+      if(!src) return null;
+    }catch(e){ return null; }
+  }
+  const dims = await loadImageDims(src);
+  if(!dims || !dims.width || !dims.height) return null;
+  const m = /^data:image\/(png|jpe?g|webp|gif)/i.exec(src);
+  const format = m ? ({ png: 'PNG', jpg: 'JPEG', jpeg: 'JPEG', webp: 'WEBP', gif: 'GIF' })[m[1].toLowerCase()] : 'JPEG';
+  return { dataUrl: src, width: dims.width, height: dims.height, format };
+}
+
 async function printWeekPlan(){
   const btn = document.getElementById('planPrint');
   const originalText = btn.textContent;
@@ -1146,6 +1183,14 @@ async function printWeekPlan(){
       const recipe = entry ? recipes.find(r => r.id === entry.recipe_id) : null;
       days.push({ date, dayAbbrev: WEEKDAY_NAMES[i], dayFull: WEEKDAY_FULL_NAMES[i], recipe });
     }
+
+    const resolvedByRecipeId = new Map();
+    await Promise.all(days.filter(d => d.recipe).map(async d => {
+      if(resolvedByRecipeId.has(d.recipe.id)) return;
+      resolvedByRecipeId.set(d.recipe.id, await resolveWeekPlanRecipeImage(d.recipe));
+    }));
+    days.forEach(d => { if(d.recipe) d.resolvedImage = resolvedByRecipeId.get(d.recipe.id) || null; });
+
     const weekEnd = addDays(planWeekStart, 6);
     const rangeLabel = `${planWeekStart.toLocaleDateString('sv-SE', { day:'numeric', month:'long' })} – ${weekEnd.toLocaleDateString('sv-SE', { day:'numeric', month:'long', year:'numeric' })}`;
     const printedLabel = new Date().toLocaleDateString('sv-SE', { day:'numeric', month:'long', year:'numeric' });
@@ -1972,13 +2017,15 @@ document.getElementById('exportPdfBtn').onclick = async () => {
       }
 
       const imgs = imagesOf(r);
-      if(imgs[0] && imgs[0].startsWith('data:image')){
+      const imgFormatMatch = imgs[0] && /^data:image\/(png|jpe?g|webp|gif)/i.exec(imgs[0]);
+      if(imgFormatMatch){
         try{
+          const imgFormat = ({ png: 'PNG', jpg: 'JPEG', jpeg: 'JPEG', webp: 'WEBP', gif: 'GIF' })[imgFormatMatch[1].toLowerCase()];
           const props = doc.getImageProperties(imgs[0]);
           const imgW = Math.min(150, maxWidth);
           const imgH = imgW * (props.height / props.width);
           ensureSpace(imgH + 8);
-          doc.addImage(imgs[0], margin, y, imgW, imgH);
+          doc.addImage(imgs[0], imgFormat, margin, y, imgW, imgH);
           y += imgH + 8;
         }catch(e){ /* skip image that jsPDF can't read */ }
       }
