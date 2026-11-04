@@ -513,6 +513,7 @@
     <button class="btn btn-ghost" id="planNextWeek" type="button">Nästa ›</button>
     <button class="btn btn-secondary" id="planRandomize" type="button">🎲 Slumpa förslag</button>
     <button class="btn btn-ghost" id="planShoppingList" type="button">🛒 Inköpslista</button>
+    <button class="btn btn-ghost" id="planPrint" type="button">🖨 Skriv ut</button>
     <div class="dropdown-wrap">
       <button class="btn btn-ghost" id="planTagFilterBtn" type="button" aria-haspopup="true" aria-expanded="false">🚫 Uteslut taggar<span class="tagfilter-count" id="planTagFilterCount" style="display:none;"></span></button>
       <div class="dropdown-panel" id="planTagFilterPanel">
@@ -894,6 +895,7 @@ function openRecipePicker(onSelect){
 }
 
 const WEEKDAY_NAMES = ['Mån','Tis','Ons','Tor','Fre','Lör','Sön'];
+const WEEKDAY_FULL_NAMES = ['Måndag','Tisdag','Onsdag','Torsdag','Fredag','Lördag','Söndag'];
 
 function loadShoppingChecked(weekKey){
   try{
@@ -974,6 +976,143 @@ function openShoppingList(){
     });
   }
   bindShopCheckboxes();
+}
+
+function printWeekPlanIngredientsHtml(recipe){
+  if(!(recipe.ingredients && recipe.ingredients.length)){
+    return `<div class="missing">Inga sparade ingredienser &mdash; kolla receptet manuellt.</div>`;
+  }
+  return `<div style="display:flex; flex-direction:column; gap:8px;">${recipe.ingredients.map(ing =>
+    `<div class="item"><span class="box"></span>${escapeHtml(ing)}</div>`
+  ).join('')}</div>`;
+}
+
+function printWeekPlanDayColumnHtml(day){
+  const dateLabel = `${day.date.getDate()}/${day.date.getMonth() + 1}`;
+  if(!day.recipe){
+    return `<div class="col"><div class="daylabel">${escapeHtml(day.dayFull)} ${dateLabel}</div><div class="empty-day">Inget inplanerat</div></div>`;
+  }
+  const r = day.recipe;
+  const img = imagesOf(r)[0];
+  return `
+    <div class="col">
+      <div class="daylabel">${escapeHtml(day.dayFull)} ${dateLabel}</div>
+      ${img ? `<div class="photo"><img src="${img}" alt=""></div>` : ''}
+      <div class="recipename">${escapeHtml(r.name)}</div>
+      ${(r.tags && r.tags.length) ? `<div class="tagrow">${r.tags.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
+      <div class="shoplabel">Inköpslista</div>
+      ${printWeekPlanIngredientsHtml(r)}
+    </div>
+  `;
+}
+
+function buildWeekPlanPrintHtml(){
+  const days = [];
+  for(let i = 0; i < 7; i++){
+    const date = addDays(planWeekStart, i);
+    const dateStr = isoDate(date);
+    const entry = mealPlan.find(p => p.plan_date === dateStr);
+    const recipe = entry ? recipes.find(r => r.id === entry.recipe_id) : null;
+    days.push({ date, dayAbbrev: WEEKDAY_NAMES[i], dayFull: WEEKDAY_FULL_NAMES[i], recipe });
+  }
+
+  const weekEnd = addDays(planWeekStart, 6);
+  const rangeLabel = `${planWeekStart.toLocaleDateString('sv-SE', { day:'numeric', month:'long' })} &ndash; ${weekEnd.toLocaleDateString('sv-SE', { day:'numeric', month:'long', year:'numeric' })}`;
+  const printedLabel = new Date().toLocaleDateString('sv-SE', { day:'numeric', month:'long', year:'numeric' });
+
+  const summaryColHtml = `
+    <div class="col">
+      <div class="col-heading">Hela veckan</div>
+      ${days.map(d => `
+        <div class="summary-row">
+          <div class="summary-day${d.recipe ? '' : ' summary-day-empty'}">${escapeHtml(d.dayAbbrev)} ${d.date.getDate()}/${d.date.getMonth() + 1}</div>
+          <div class="summary-name${d.recipe ? '' : ' summary-empty'}">${d.recipe ? escapeHtml(d.recipe.name) : 'Inget inplanerat'}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+
+  function pageHtml(colsHtml, pageNum, totalPages){
+    return `
+      <div class="page">
+        <div class="page-header">
+          <div><span class="brand">Receptlådan</span><span class="title">Veckoplan</span></div>
+          <div class="meta">${rangeLabel} &middot; Sida ${pageNum} av ${totalPages}</div>
+        </div>
+        <div class="cols">${colsHtml}</div>
+        <div class="page-footer">Utskriven ${escapeHtml(printedLabel)}</div>
+      </div>
+    `;
+  }
+
+  const page1 = pageHtml(summaryColHtml + days.slice(0, 3).map(printWeekPlanDayColumnHtml).join(''), 1, 2);
+  const page2 = pageHtml(days.slice(3, 7).map(printWeekPlanDayColumnHtml).join(''), 2, 2);
+
+  return `<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<title>Veckoplan &ndash; utskrift</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Karla:wght@400;500;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  *{ box-sizing:border-box; }
+  body{ margin:0; font-family:'Karla',sans-serif; color:#2A2620; }
+  @page{ size: A4 landscape; margin:0; }
+  @media screen{
+    body{ background:#ccc; display:flex; flex-direction:column; align-items:center; gap:20px; padding:20px 0; }
+    .page{ box-shadow:0 2px 14px rgba(0,0,0,.22); }
+  }
+  @media print{
+    body{ background:none; padding:0; }
+    .page{ box-shadow:none; }
+  }
+  .page{ width:1123px; height:794px; box-sizing:border-box; padding:40px 48px; background:#FBF6E9; display:flex; flex-direction:column; page-break-after:always; }
+  .page:last-of-type{ page-break-after:auto; }
+  .page-header{ display:flex; justify-content:space-between; align-items:baseline; padding-bottom:14px; border-bottom:2px solid #2A2620; }
+  .brand{ font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:#B98526; }
+  .title{ font-family:'Fraunces',serif; font-weight:600; font-size:22px; margin-left:10px; }
+  .meta{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:#6B6455; }
+  .page-footer{ padding-top:14px; border-top:1px solid #EDE4CC; font-family:'IBM Plex Mono',monospace; font-size:9px; color:#9C947C; }
+  .cols{ display:flex; flex:1 1 auto; min-height:0; padding-top:18px; }
+  .col{ flex:1 1 0; min-width:0; padding:18px 22px 0 22px; border-right:1px solid #DED2AC; display:flex; flex-direction:column; }
+  .col:first-child{ padding-left:0; }
+  .col:last-child{ border-right:none; }
+  .col-heading{ font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:#9C947C; margin-bottom:10px; }
+  .summary-row{ padding:7px 0; border-bottom:1px solid #EFE7CE; }
+  .summary-row:last-child{ border-bottom:none; }
+  .summary-day{ font-family:'IBM Plex Mono',monospace; font-size:9.5px; font-weight:700; color:#B98526; text-transform:uppercase; }
+  .summary-day-empty{ color:#9C947C; }
+  .summary-name{ font-size:12.5px; margin-top:1px; }
+  .summary-empty{ font-style:italic; color:#B3A290; }
+  .daylabel{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:#B98526; }
+  .recipename{ font-family:'Fraunces',serif; font-weight:600; font-size:16.5px; line-height:1.25; margin-top:8px; }
+  .tagrow{ display:flex; flex-wrap:wrap; gap:6px; margin:7px 0 2px; }
+  .tag{ font-family:'IBM Plex Mono',monospace; font-size:8.5px; text-transform:uppercase; padding:2px 7px; border-radius:9px; background:#EFE7CE; color:#6B5A2E; border:1px solid #E0D3A8; }
+  .shoplabel{ font-family:'IBM Plex Mono',monospace; font-size:9px; letter-spacing:.06em; text-transform:uppercase; color:#9C947C; border-top:1px solid #DED2AC; padding-top:10px; margin-top:12px; margin-bottom:10px; }
+  .item{ display:flex; align-items:flex-start; font-size:12.5px; line-height:1.35; }
+  .box{ display:inline-block; width:12px; height:12px; border:1.3px solid #2A2620; border-radius:3px; margin-right:9px; margin-top:2px; flex:0 0 auto; }
+  .missing{ font-size:12px; font-style:italic; color:#9C947C; }
+  .photo{ width:100%; height:130px; border-radius:3px; overflow:hidden; background:#EFE7CE; border:1px solid #DED2AC; margin-bottom:12px; }
+  .photo img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .empty-day{ font-family:'Fraunces',serif; font-style:italic; font-size:16px; color:#B3A290; margin-top:8px; }
+</style>
+</head>
+<body>
+${page1}
+${page2}
+</body>
+</html>`;
+}
+
+function printWeekPlan(){
+  const html = buildWeekPlanPrintHtml();
+  const w = window.open('', '_blank');
+  if(!w){ alert('Kunde inte öppna utskriftsfönstret. Kontrollera att popup-fönster är tillåtna i webbläsaren.'); return; }
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+  w.onload = () => { setTimeout(() => { w.focus(); w.print(); }, 250); };
 }
 
 function renderWeekPlanGrid(){
@@ -1342,6 +1481,7 @@ document.getElementById('planRandomize').onclick = async () => {
   btn.disabled = false; btn.textContent = '🎲 Slumpa förslag';
 };
 document.getElementById('planShoppingList').onclick = openShoppingList;
+document.getElementById('planPrint').onclick = printWeekPlan;
 
 function recordView(recipeId){
   const r = recipes.find(x => x.id === recipeId);
