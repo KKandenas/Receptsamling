@@ -478,6 +478,8 @@
       <option value="recent">Senast tillagda</option>
       <option value="alpha">Bokstavsordning (A–Ö)</option>
       <option value="rating">Högst betyg</option>
+      <option value="lastviewed">Senast öppnad</option>
+      <option value="popular">Populärast</option>
     </select>
     <select class="search" id="scopeSelect" style="flex:0 0 auto; min-width:150px; cursor:pointer;">
       <option value="all">Alla recept</option>
@@ -1210,6 +1212,12 @@ function getFilteredSortedList(){
   return list.slice().sort((a,b) => {
     if(sortMode === 'alpha') return a.name.localeCompare(b.name, 'sv');
     if(sortMode === 'rating') return ratingStatsFor(b.id).avg - ratingStatsFor(a.id).avg || new Date(b.created_at) - new Date(a.created_at);
+    if(sortMode === 'lastviewed'){
+      const aT = a.last_viewed_at ? new Date(a.last_viewed_at).getTime() : 0;
+      const bT = b.last_viewed_at ? new Date(b.last_viewed_at).getTime() : 0;
+      return bT - aT || new Date(b.created_at) - new Date(a.created_at);
+    }
+    if(sortMode === 'popular') return (b.view_count || 0) - (a.view_count || 0) || new Date(b.created_at) - new Date(a.created_at);
     return new Date(b.created_at) - new Date(a.created_at);
   });
 }
@@ -1302,9 +1310,20 @@ document.getElementById('planRandomize').onclick = async () => {
 };
 document.getElementById('planShoppingList').onclick = openShoppingList;
 
+function recordView(recipeId){
+  const r = recipes.find(x => x.id === recipeId);
+  if(!r) return;
+  r.view_count = (r.view_count || 0) + 1;
+  r.last_viewed_at = new Date().toISOString();
+  // Fire-and-forget: a stat update shouldn't block or break opening the recipe.
+  sb.from('recipes').update({ view_count: r.view_count, last_viewed_at: r.last_viewed_at }).eq('id', recipeId)
+    .then(({ error }) => { if(error) console.error('Kunde inte uppdatera visningsstatistik:', error.message); });
+}
+
 function openDetail(id){
   const r = recipes.find(x => x.id === id);
   if(!r) return;
+  recordView(id);
   const isMine = r.owner_id === (currentUser && currentUser.id);
   const stats = ratingStatsFor(r.id);
   const myRating = myRatingFor(r.id);
