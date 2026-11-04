@@ -17,6 +17,7 @@ Byggd som en enda fristående webbsida (`index.html`), värd gratis på GitHub P
 - **Egna taggar** – lägg till, byt namn på eller ta bort taggar/kategorier (förrätt, huvudrätt, fisk, kött, osv.) via "Hantera taggar".
 - **Betygsätt recept** – klicka på 1–5 stjärnor för att sätta ditt eget betyg. Varje person i receptlådan har sitt eget betyg, och kortet visar snittet av allas betyg.
 - **Favoriter** – hjärtmarkera vems recept som helst och hitta dem snabbt igen under "Favoriter", utan att behöva kopiera dem till din egen låda.
+- **Kommentarer** – skriv korta kommentarer på vilket recept som helst (t.ex. "bytte ut X mot Y"), synliga för alla i receptlådan. Man kan bara ta bort sina egna kommentarer.
 - **Ljust/mörkt läge** – växla tema med knappen uppe i hörnet, valet sparas i din webbläsare.
 - **Veckoplanering** – planera din vecka med recept från hela receptlådan, eller låt "Slumpa förslag" fylla tomma dagar automatiskt (med viss variation om recepten är taggade t.ex. Fisk/Kött/Vegetariskt).
 - **Sök, filtrera och sortera** – sök på namn eller anteckningstext, filtrera på taggar, sortera på senast tillagda, bokstavsordning, betyg, senast öppnad eller populärast (flest öppningar).
@@ -117,6 +118,17 @@ create table if not exists meal_plan (
 );
 alter table meal_plan enable row level security;
 create policy "allow all" on meal_plan for all using (true) with check (true);
+
+-- Kommentarer
+create table if not exists comments (
+  id uuid primary key default gen_random_uuid(),
+  recipe_id uuid not null references recipes(id) on delete cascade,
+  user_id uuid not null references users(id) on delete cascade,
+  text text not null,
+  created_at timestamptz default now()
+);
+alter table comments enable row level security;
+create policy "allow all" on comments for all using (true) with check (true);
 
 -- Skapa en första receptlåda
 insert into users (name) values ('Irene') on conflict (name) do nothing;
