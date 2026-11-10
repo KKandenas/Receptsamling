@@ -2213,13 +2213,16 @@ function stripMarkdownLinks(s){
     .trim();
 }
 
+const INGREDIENTS_HEADING_RE = /^#{1,6}\s*ingrediens/i;
+const INSTRUCTIONS_HEADING_RE = /^#{1,6}\s*(g[öo]r s[åa] h[äa]r|instruktioner?|tillagning|method|directions|steps)/i;
+
 function parseIngredientsFromMarkdown(text){
   // Best-effort fallback when there's no schema.org data to read: look for a visible
   // "Ingredienser" heading and grab the list under it from Jina's rendered markdown.
   // Some sites render their ingredient list as an HTML table (name + amount columns),
   // which Jina turns into a markdown table rather than a bullet list, so handle both.
   const lines = text.split('\n');
-  const startIdx = lines.findIndex(l => /^#{1,6}\s*ingrediens/i.test(l.trim()));
+  const startIdx = lines.findIndex(l => INGREDIENTS_HEADING_RE.test(l.trim()));
   if(startIdx === -1) return null;
   const items = [];
   for(let i = startIdx + 1; i < lines.length; i++){
@@ -2227,7 +2230,10 @@ function parseIngredientsFromMarkdown(text){
     if(!line) continue; // some renderers put a blank line between each list item
     if(/^#{1,6}\s/.test(line)){
       // Some sites split the list with a sub-heading (e.g. "Tillbehör") instead of
-      // ending it there — keep going if real list items still follow it.
+      // ending it there — keep going if real list items still follow it, but never
+      // past the actual instructions heading (that's a different section entirely,
+      // even though its first step may also look like a list item).
+      if(INSTRUCTIONS_HEADING_RE.test(line)) break;
       let j = i + 1;
       while(j < lines.length && !lines[j].trim()) j++;
       const next = j < lines.length ? lines[j].trim() : '';
@@ -2254,7 +2260,7 @@ function parseInstructionsFromMarkdown(text){
   // Mirrors parseIngredientsFromMarkdown, but for the "Gör så här" / "Instruktioner"
   // style heading most recipe sites use for their step list.
   const lines = text.split('\n');
-  const startIdx = lines.findIndex(l => /^#{1,6}\s*(g[öo]r s[åa] h[äa]r|instruktioner?|tillagning|method|directions|steps)/i.test(l.trim()));
+  const startIdx = lines.findIndex(l => INSTRUCTIONS_HEADING_RE.test(l.trim()));
   if(startIdx === -1) return null;
   const items = [];
   for(let i = startIdx + 1; i < lines.length; i++){
@@ -2262,7 +2268,10 @@ function parseInstructionsFromMarkdown(text){
     if(!line) continue; // some renderers put a blank line between each list item
     if(/^#{1,6}\s/.test(line)){
       // Some sites split the steps with a sub-heading (e.g. "Vid servering") instead
-      // of ending the list there — keep going if real list items still follow it.
+      // of ending the list there — keep going if real list items still follow it, but
+      // never past an actual ingredients heading (shouldn't normally appear after the
+      // instructions, but be defensive the same way as the ingredients parser above).
+      if(INGREDIENTS_HEADING_RE.test(line)) break;
       let j = i + 1;
       while(j < lines.length && !lines[j].trim()) j++;
       const next = j < lines.length ? lines[j].trim() : '';
