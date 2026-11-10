@@ -2196,8 +2196,37 @@ function parseMetaFromHtml(html, baseUrl){
 function parseIngredientsFromMarkdown(text){
   // Best-effort fallback when there's no schema.org data to read: look for a visible
   // "Ingredienser" heading and grab the list under it from Jina's rendered markdown.
+  // Some sites render their ingredient list as an HTML table (name + amount columns),
+  // which Jina turns into a markdown table rather than a bullet list, so handle both.
   const lines = text.split('\n');
   const startIdx = lines.findIndex(l => /^#{0,6}\s*ingrediens/i.test(l.trim()));
+  if(startIdx === -1) return null;
+  const items = [];
+  for(let i = startIdx + 1; i < lines.length; i++){
+    const line = lines[i].trim();
+    if(!line){ if(items.length) break; else continue; }
+    if(/^#{1,6}\s/.test(line)) break;
+    const tableMatch = line.match(/^\|(.+)\|$/);
+    if(tableMatch){
+      const cells = tableMatch[1].split('|').map(c => c.trim()).filter(Boolean);
+      const isSeparatorRow = cells.every(c => /^:?-{2,}:?$/.test(c));
+      if(!isSeparatorRow && cells.length){
+        items.push(cells.length === 2 ? `${cells[1]} ${cells[0]}` : cells.join(' '));
+      }
+      continue;
+    }
+    const m = line.match(/^[-*•]\s+(.+)$/) || line.match(/^\d+[.)]\s+(.+)$/);
+    if(m) items.push(m[1].trim());
+    else if(items.length) break;
+  }
+  return items.length ? items : null;
+}
+
+function parseInstructionsFromMarkdown(text){
+  // Mirrors parseIngredientsFromMarkdown, but for the "Gör så här" / "Instruktioner"
+  // style heading most recipe sites use for their step list.
+  const lines = text.split('\n');
+  const startIdx = lines.findIndex(l => /^#{0,6}\s*(g[öo]r s[åa] h[äa]r|instruktioner?|tillagning|method|directions|steps)/i.test(l.trim()));
   if(startIdx === -1) return null;
   const items = [];
   for(let i = startIdx + 1; i < lines.length; i++){
@@ -2217,7 +2246,8 @@ function parseMetaFromJinaText(text){
   const imgMatch = text.match(/!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/);
   const image = imgMatch ? imgMatch[1] : null;
   const ingredients = parseIngredientsFromMarkdown(text);
-  return { title, image, ingredients };
+  const instructions = parseInstructionsFromMarkdown(text);
+  return { title, image, ingredients, instructions };
 }
 
 async function fetchLinkPreview(url){
@@ -2243,15 +2273,18 @@ async function fetchLinkPreview(url){
   // until we have ingredients or have genuinely exhausted every source.
   let best = htmlInfos.find(info => info.ingredients && info.ingredients.length) || htmlInfos[0] || null;
 
-  if(!best || !(best.ingredients && best.ingredients.length)){
+  const hasIngredients = best && best.ingredients && best.ingredients.length;
+  const hasInstructions = best && best.instructions && best.instructions.length;
+  if(!best || !hasIngredients || !hasInstructions){
     try{
       const text = await fetchViaProxy('https://r.jina.ai/' + url);
       if(text && text.length > 50){
         const jinaInfo = parseMetaFromJinaText(text);
         if(!best){
-          if(jinaInfo.title || jinaInfo.image || (jinaInfo.ingredients && jinaInfo.ingredients.length)) best = jinaInfo;
-        }else if(jinaInfo.ingredients && jinaInfo.ingredients.length){
-          best = { ...best, ingredients: jinaInfo.ingredients };
+          if(jinaInfo.title || jinaInfo.image || (jinaInfo.ingredients && jinaInfo.ingredients.length) || (jinaInfo.instructions && jinaInfo.instructions.length)) best = jinaInfo;
+        }else{
+          if(!hasIngredients && jinaInfo.ingredients && jinaInfo.ingredients.length) best = { ...best, ingredients: jinaInfo.ingredients };
+          if(!hasInstructions && jinaInfo.instructions && jinaInfo.instructions.length) best = { ...best, instructions: jinaInfo.instructions };
         }
       }
     }catch(e){ /* keep whatever the HTML proxies already found, if anything */ }
