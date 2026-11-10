@@ -2193,6 +2193,17 @@ function parseMetaFromHtml(html, baseUrl){
   };
 }
 
+function stripMarkdownLinks(s){
+  // Jina often wraps ingredient/step names in a product link (sometimes with a
+  // thumbnail image nested inside it), e.g. "[![alt](imgurl) Namn](https://…)" —
+  // strip the markdown link/image syntax, keeping just the visible text.
+  return s
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function parseIngredientsFromMarkdown(text){
   // Best-effort fallback when there's no schema.org data to read: look for a visible
   // "Ingredienser" heading and grab the list under it from Jina's rendered markdown.
@@ -2208,7 +2219,7 @@ function parseIngredientsFromMarkdown(text){
     if(/^#{1,6}\s/.test(line)) break;
     const tableMatch = line.match(/^\|(.+)\|$/);
     if(tableMatch){
-      const cells = tableMatch[1].split('|').map(c => c.trim()).filter(Boolean);
+      const cells = tableMatch[1].split('|').map(c => stripMarkdownLinks(c)).filter(Boolean);
       const isSeparatorRow = cells.every(c => /^:?-{2,}:?$/.test(c));
       if(!isSeparatorRow && cells.length){
         items.push(cells.length === 2 ? `${cells[1]} ${cells[0]}` : cells.join(' '));
@@ -2216,7 +2227,7 @@ function parseIngredientsFromMarkdown(text){
       continue;
     }
     const m = line.match(/^[-*•]\s+(.+)$/) || line.match(/^\d+[.)]\s+(.+)$/);
-    if(m) items.push(m[1].trim());
+    if(m) items.push(stripMarkdownLinks(m[1]));
     else if(items.length) break;
   }
   return items.length ? items : null;
@@ -2234,7 +2245,7 @@ function parseInstructionsFromMarkdown(text){
     if(!line){ if(items.length) break; else continue; }
     if(/^#{1,6}\s/.test(line)) break;
     const m = line.match(/^[-*•]\s+(.+)$/) || line.match(/^\d+[.)]\s+(.+)$/);
-    if(m) items.push(m[1].trim());
+    if(m) items.push(stripMarkdownLinks(m[1]));
     else if(items.length) break;
   }
   return items.length ? items : null;
