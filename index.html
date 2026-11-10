@@ -2126,6 +2126,12 @@ function parseServingsYield(y){
   return m ? parseInt(m[1], 10) : null;
 }
 
+function stripHtmlTags(s){
+  // Some sites' JSON-LD embeds raw HTML inside a step's text (e.g. a link to
+  // another recipe), which would otherwise show up as literal <a href="…"> tags.
+  return String(s).replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+}
+
 function flattenRecipeInstructions(ri){
   if(!ri) return [];
   if(typeof ri === 'string') return ri.split(/\n+/).map(s => s.trim()).filter(Boolean);
@@ -2141,7 +2147,7 @@ function flattenRecipeInstructions(ri){
     if(step.text) steps.push(step.text);
     else if(step.name) steps.push(step.name);
   });
-  return steps.map(s => String(s).trim()).filter(Boolean);
+  return steps.map(s => stripHtmlTags(s)).filter(Boolean);
 }
 
 function parseRecipeJsonLd(doc){
@@ -2158,7 +2164,7 @@ function parseRecipeJsonLd(doc){
       const isRecipe = type === 'Recipe' || (Array.isArray(type) && type.includes('Recipe'));
       if(!isRecipe) continue;
       const ingredients = Array.isArray(item.recipeIngredient) && item.recipeIngredient.length
-        ? item.recipeIngredient.map(s => String(s).trim()).filter(Boolean) : null;
+        ? item.recipeIngredient.map(s => stripHtmlTags(s)).filter(Boolean) : null;
       const instructions = flattenRecipeInstructions(item.recipeInstructions);
       const timeMinutes = parseIsoDurationMinutes(item.totalTime)
         || parseIsoDurationMinutes(item.cookTime)
