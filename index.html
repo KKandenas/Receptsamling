@@ -316,6 +316,8 @@
   .detail-text{ white-space:pre-wrap; line-height:1.6; font-size:14.5px; color:#3A362C; margin-top:6px; }
   .detail-ingredients{ margin:6px 0 0; padding-left:20px; font-size:14.5px; line-height:1.6; color:#3A362C; }
   .detail-ingredients li{ margin-bottom:2px; }
+  .detail-instructions{ margin:6px 0 0; padding-left:20px; font-size:14.5px; line-height:1.6; color:#3A362C; }
+  .detail-instructions li{ margin-bottom:8px; }
   .shop-section{ margin-bottom:20px; }
   .shop-section-title{ font-family:'Fraunces',serif; font-weight:600; font-size:17px; margin:0 0 8px; }
   .shop-item{ display:flex; align-items:center; gap:10px; padding:5px 0; font-size:14.5px; }
@@ -434,6 +436,15 @@
   .card-owner{
     font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:.05em; text-transform:uppercase;
     color:#9C947C; margin-top:4px;
+  }
+  .card-time{
+    font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8C8262; margin-top:4px;
+  }
+  .card-status{ color:#B98526; font-style:italic; }
+  .status-note{
+    font-size:13px; color:#6B5A2E; background:#EFE7CE; border:1px solid #E0D3A8;
+    border-radius:8px; padding:10px 12px; margin:12px 0; display:flex; align-items:center;
+    justify-content:space-between; gap:10px; flex-wrap:wrap;
   }
   .detail-owner{
     font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.03em; text-transform:uppercase;
@@ -1448,7 +1459,8 @@ function renderTagBar(){
 function matchesFilters(r){
   const term = searchTerm.toLowerCase();
   const textOk = !term || r.name.toLowerCase().includes(term) || (r.note || '').toLowerCase().includes(term)
-    || (r.ingredients || []).some(ing => ing.toLowerCase().includes(term));
+    || (r.ingredients || []).some(ing => ing.toLowerCase().includes(term))
+    || (r.instructions || []).some(step => step.toLowerCase().includes(term));
   const tagOk = activeTagFilters.size === 0 || (r.tags||[]).some(t => activeTagFilters.has(t));
   let scopeOk;
   if(viewScope === 'mine') scopeOk = r.owner_id === (currentUser && currentUser.id);
@@ -1467,6 +1479,15 @@ function imagesOf(r){
   if(r.images && r.images.length) return r.images;
   if(r.image) return [r.image];
   return [];
+}
+
+const RECIPE_STATUS_LABEL = { link_only: 'Endast länk', partial: 'Ofullständigt' };
+function recipeStatus(r){
+  const hasIngredients = !!(r.ingredients && r.ingredients.length);
+  const hasInstructions = !!(r.instructions && r.instructions.length);
+  if(hasIngredients && hasInstructions) return 'full';
+  if(r.link && !hasIngredients && !hasInstructions) return 'link_only';
+  return 'partial';
 }
 
 function getFilteredSortedList(){
@@ -1510,10 +1531,11 @@ function buildRecipeCard(r, opts){
     ${imgs[0] ? `<div style="position:relative;"><img class="card-thumb" src="${imgs[0]}" alt="">${imgs.length > 1 ? `<span class="tag-pill" style="position:absolute; bottom:6px; right:6px; background:#2A2620; color:#FBF6E9; border-color:#2A2620;">+${imgs.length - 1}</span>` : ''}</div>` : ''}
     <div class="card-name">${escapeHtml(r.name)}</div>
     <div class="card-owner">${escapeHtml(ownerName(r.owner_id))}s recept</div>
+    ${(r.time_minutes || r.servings) ? `<div class="card-time">${[r.time_minutes ? `⏱ ${r.time_minutes} min` : '', r.servings ? `🍽 ${r.servings} port.` : ''].filter(Boolean).join(' · ')}</div>` : ''}
     <div class="card-stars">${starsMarkupReadonly(stats.avg, stats.count)}</div>
     <div class="card-meta">${(r.tags||[]).map(t => `<span class="tag-pill">${escapeHtml(t)}</span>`).join('')}</div>
     <div class="card-snippet">${escapeHtml(snippetFor(r))}</div>
-    <div class="card-source">${r.link ? '🔗 länk' : ''} ${imgs.length ? '🖼 bild' : ''} ${(!r.link && !imgs.length) ? '📝 anteckning' : ''}</div>
+    <div class="card-source">${r.link ? '🔗 länk' : ''} ${imgs.length ? '🖼 bild' : ''} ${(!r.link && !imgs.length) ? '📝 anteckning' : ''}${RECIPE_STATUS_LABEL[recipeStatus(r)] ? ` · <span class="card-status">${RECIPE_STATUS_LABEL[recipeStatus(r)]}</span>` : ''}</div>
   `;
   card.querySelector('.fav-btn').onclick = (e) => { e.stopPropagation(); toggleFavorite(r.id); };
   if(opts.onRemove){
@@ -1621,6 +1643,13 @@ function openDetail(id){
         <div class="detail-owner">${escapeHtml(ownerName(r.owner_id))}s recept</div>
         <h2>${escapeHtml(r.name)}</h2>
         <div class="detail-tags">${(r.tags||[]).map(t=>`<span class="tag-pill">${escapeHtml(t)}</span>`).join('')}</div>
+        ${(r.time_minutes || r.servings) ? `<div class="card-time" style="margin-bottom:8px;">${[r.time_minutes ? `⏱ ${r.time_minutes} min` : '', r.servings ? `🍽 ${r.servings} portioner` : ''].filter(Boolean).join(' · ')}</div>` : ''}
+        ${isMine && recipeStatus(r) !== 'full' ? `
+          <div class="status-note">
+            <span>${recipeStatus(r) === 'link_only' ? 'Det här receptet är bara en sparad länk ännu.' : 'Det här receptet är inte komplett ännu.'}</span>
+            <button class="btn btn-secondary" id="completeBtn" type="button" style="white-space:nowrap;">Komplettera recept</button>
+          </div>
+        ` : ''}
         <button class="btn btn-ghost" id="findSimilarBtn" type="button" style="margin-bottom:12px;">🔎 Sök liknande recept</button>
         <div class="detail-rating">
           <div class="detail-rating-label">Snittbetyg</div>
@@ -1633,6 +1662,7 @@ function openDetail(id){
         ${imagesOf(r).length ? `<div class="detail-gallery">${imagesOf(r).map((src,i) => `<img src="${src}" alt="" data-idx="${i}">`).join('')}</div>` : ''}
         ${r.link ? `<div><a class="detail-link" href="${r.link}" target="_blank" rel="noopener">${escapeHtml(r.link)}</a></div>` : ''}
         ${r.ingredients && r.ingredients.length ? `<div class="detail-rating-label" style="margin-top:14px;">Ingredienser</div><ul class="detail-ingredients">${r.ingredients.map(ing => `<li>${escapeHtml(ing)}</li>`).join('')}</ul>` : ''}
+        ${r.instructions && r.instructions.length ? `<div class="detail-rating-label" style="margin-top:14px;">Instruktioner</div><ol class="detail-instructions">${r.instructions.map(step => `<li>${escapeHtml(step)}</li>`).join('')}</ol>` : ''}
         ${r.note ? `<div class="detail-text">${escapeHtml(r.note)}</div>` : ''}
         <div class="detail-date">Sparat ${new Date(r.created_at).toLocaleDateString('sv-SE', {year:'numeric', month:'long', day:'numeric'})}</div>
         <div class="detail-rating-label" style="margin-top:20px;">Kommentarer</div>
@@ -1655,6 +1685,8 @@ function openDetail(id){
   document.getElementById('ovDetail').onclick = (e) => { if(e.target.id === 'ovDetail') closeModal(); };
   document.getElementById('favToggleDetail').onclick = () => toggleFavorite(r.id);
   document.getElementById('findSimilarBtn').onclick = () => openExplore(r.name);
+  const completeBtn = document.getElementById('completeBtn');
+  if(completeBtn) completeBtn.onclick = () => openForm(r.id);
   modalRoot.querySelectorAll('#myStars .star-btn').forEach(btn => {
     btn.onclick = () => setMyRating(r.id, Number(btn.dataset.val));
   });
@@ -1710,7 +1742,9 @@ function openDetail(id){
       copyBtn.disabled = true; copyBtn.textContent = 'Kopierar…';
       const payload = {
         name: r.name, link: r.link, note: r.note, images: imagesOf(r),
-        tags: r.tags || [], ingredients: r.ingredients || [], owner_id: currentUser.id, copied_from: r.id
+        tags: r.tags || [], ingredients: r.ingredients || [], instructions: r.instructions || [],
+        time_minutes: r.time_minutes || null, servings: r.servings || null,
+        owner_id: currentUser.id, copied_from: r.id
       };
       const { error } = await sb.from('recipes').insert([payload]);
       if(error){
@@ -2077,9 +2111,42 @@ async function fetchViaProxy(proxyUrl){
   }
 }
 
+function parseIsoDurationMinutes(duration){
+  if(!duration || typeof duration !== 'string') return null;
+  const m = /^P(?:\d+D)?T(?:(\d+)H)?(?:(\d+)M)?/.exec(duration.trim());
+  if(!m) return null;
+  const total = (m[1] ? parseInt(m[1], 10) : 0) * 60 + (m[2] ? parseInt(m[2], 10) : 0);
+  return total > 0 ? total : null;
+}
+
+function parseServingsYield(y){
+  if(y == null) return null;
+  const str = Array.isArray(y) ? y[0] : y;
+  const m = /(\d+)/.exec(String(str));
+  return m ? parseInt(m[1], 10) : null;
+}
+
+function flattenRecipeInstructions(ri){
+  if(!ri) return [];
+  if(typeof ri === 'string') return ri.split(/\n+/).map(s => s.trim()).filter(Boolean);
+  if(!Array.isArray(ri)) return [];
+  const steps = [];
+  ri.forEach(step => {
+    if(typeof step === 'string'){ steps.push(step); return; }
+    if(!step || typeof step !== 'object') return;
+    if(step['@type'] === 'HowToSection' && Array.isArray(step.itemListElement)){
+      step.itemListElement.forEach(s => { if(s && s.text) steps.push(s.text); });
+      return;
+    }
+    if(step.text) steps.push(step.text);
+    else if(step.name) steps.push(step.name);
+  });
+  return steps.map(s => String(s).trim()).filter(Boolean);
+}
+
 function parseRecipeJsonLd(doc){
   // Many recipe sites embed a schema.org Recipe block (for Google's rich-result
-  // snippets) with a real, structured ingredient list — free to read, no guessing.
+  // snippets) with real, structured recipe data — free to read, no guessing.
   const scripts = doc.querySelectorAll('script[type="application/ld+json"]');
   for(const script of scripts){
     let data;
@@ -2089,8 +2156,16 @@ function parseRecipeJsonLd(doc){
       if(!item || typeof item !== 'object') continue;
       const type = item['@type'];
       const isRecipe = type === 'Recipe' || (Array.isArray(type) && type.includes('Recipe'));
-      if(isRecipe && Array.isArray(item.recipeIngredient) && item.recipeIngredient.length){
-        return item.recipeIngredient.map(s => String(s).trim()).filter(Boolean);
+      if(!isRecipe) continue;
+      const ingredients = Array.isArray(item.recipeIngredient) && item.recipeIngredient.length
+        ? item.recipeIngredient.map(s => String(s).trim()).filter(Boolean) : null;
+      const instructions = flattenRecipeInstructions(item.recipeInstructions);
+      const timeMinutes = parseIsoDurationMinutes(item.totalTime)
+        || parseIsoDurationMinutes(item.cookTime)
+        || parseIsoDurationMinutes(item.prepTime);
+      const servings = parseServingsYield(item.recipeYield);
+      if(ingredients || instructions.length || timeMinutes || servings){
+        return { ingredients, instructions: instructions.length ? instructions : null, timeMinutes, servings };
       }
     }
   }
@@ -2108,8 +2183,14 @@ function parseMetaFromHtml(html, baseUrl){
   if(image){
     try{ image = new URL(image, baseUrl).href; }catch(e){ /* leave as-is */ }
   }
-  const ingredients = parseRecipeJsonLd(doc);
-  return { title: title ? title.trim() : null, image, ingredients };
+  const recipeData = parseRecipeJsonLd(doc);
+  return {
+    title: title ? title.trim() : null, image,
+    ingredients: recipeData && recipeData.ingredients,
+    instructions: recipeData && recipeData.instructions,
+    timeMinutes: recipeData && recipeData.timeMinutes,
+    servings: recipeData && recipeData.servings,
+  };
 }
 
 function parseIngredientsFromMarkdown(text){
@@ -2154,7 +2235,7 @@ async function fetchLinkPreview(url){
   const htmlInfos = htmlResults
     .filter(r => r.status === 'fulfilled')
     .map(r => r.value)
-    .filter(info => info.title || info.image || (info.ingredients && info.ingredients.length));
+    .filter(info => info.title || info.image || (info.ingredients && info.ingredients.length) || (info.instructions && info.instructions.length) || info.timeMinutes || info.servings);
 
   // A title/image-only result from a plain HTML fetch doesn't mean we're done: many
   // sites only render their ingredient list via JavaScript, so a result WITH
@@ -2288,6 +2369,20 @@ function openForm(id){
           <textarea id="fIngredients" placeholder="T.ex.&#10;400 g kycklingfilé&#10;2 dl grädde&#10;1 gul lök" style="min-height:80px;">${existing && existing.ingredients && existing.ingredients.length ? escapeHtml(existing.ingredients.join('\n')) : ''}</textarea>
         </div>
         <div class="field">
+          <label for="fInstructions">Instruktioner (valfritt, ett steg per rad)</label>
+          <textarea id="fInstructions" placeholder="T.ex.&#10;Hacka löken fint och fräs den mjuk.&#10;Tillsätt grädde och låt puttra 10 minuter." style="min-height:80px;">${existing && existing.instructions && existing.instructions.length ? escapeHtml(existing.instructions.join('\n')) : ''}</textarea>
+        </div>
+        <div class="field" style="display:flex; gap:14px;">
+          <div style="flex:1;">
+            <label for="fTime">Tid, minuter (valfritt)</label>
+            <input type="number" id="fTime" min="0" value="${existing && existing.time_minutes ? existing.time_minutes : ''}" placeholder="T.ex. 30">
+          </div>
+          <div style="flex:1;">
+            <label for="fServings">Portioner (valfritt)</label>
+            <input type="number" id="fServings" min="0" value="${existing && existing.servings ? existing.servings : ''}" placeholder="T.ex. 4">
+          </div>
+        </div>
+        <div class="field">
           <label>Bilder (valfritt, flera går bra)</label>
           <div class="imgpick">
             <label class="filelabel" for="fImage">Välj bilder</label>
@@ -2368,6 +2463,9 @@ function openForm(id){
       const info = await fetchLinkPreview(url);
       const nameInput = document.getElementById('fName');
       const ingredientsInput = document.getElementById('fIngredients');
+      const instructionsInput = document.getElementById('fInstructions');
+      const timeInput = document.getElementById('fTime');
+      const servingsInput = document.getElementById('fServings');
       if(info.title && !nameInput.value.trim()) nameInput.value = info.title;
       if(info.image && !imageList.includes(info.image)){
         imageList.push(info.image);
@@ -2376,12 +2474,20 @@ function openForm(id){
       if(info.ingredients && info.ingredients.length && !ingredientsInput.value.trim()){
         ingredientsInput.value = info.ingredients.join('\n');
       }
+      if(info.instructions && info.instructions.length && !instructionsInput.value.trim()){
+        instructionsInput.value = info.instructions.join('\n');
+      }
+      if(info.timeMinutes && !timeInput.value.trim()) timeInput.value = info.timeMinutes;
+      if(info.servings && !servingsInput.value.trim()) servingsInput.value = info.servings;
       const found = [];
       if(info.title) found.push('titel');
       if(info.image) found.push('bild');
       if(info.ingredients && info.ingredients.length) found.push(info.ingredients.length + ' ingredienser');
+      if(info.instructions && info.instructions.length) found.push(info.instructions.length + ' instruktionssteg');
+      if(info.timeMinutes) found.push('tid');
+      if(info.servings) found.push('portioner');
       if(!found.length){
-        status.textContent = 'Hittade varken titel, bild eller ingredienser på sidan – fyll i manuellt.';
+        status.textContent = 'Hittade varken titel, bild eller receptinfo på sidan – fyll i manuellt.';
         status.style.color = '#A8432B';
       }else{
         status.textContent = 'Klart! Fyllde i ' + found.join(', ') + ' — ändra gärna själv.';
@@ -2442,6 +2548,9 @@ function openForm(id){
     const link = document.getElementById('fLink').value.trim();
     const note = document.getElementById('fText').value.trim();
     const ingredients = document.getElementById('fIngredients').value.split('\n').map(s => s.trim()).filter(Boolean);
+    const instructions = document.getElementById('fInstructions').value.split('\n').map(s => s.trim()).filter(Boolean);
+    const timeVal = document.getElementById('fTime').value.trim();
+    const servingsVal = document.getElementById('fServings').value.trim();
     const saveBtn = document.getElementById('saveForm');
     saveBtn.textContent = 'Sparar…'; saveBtn.disabled = true;
 
@@ -2451,7 +2560,10 @@ function openForm(id){
       note: note || null,
       images: imageList,
       tags: Array.from(chosenTags),
-      ingredients
+      ingredients,
+      instructions,
+      time_minutes: timeVal ? Number(timeVal) : null,
+      servings: servingsVal ? Number(servingsVal) : null
     };
 
     let error;
