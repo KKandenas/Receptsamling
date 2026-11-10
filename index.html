@@ -2252,15 +2252,16 @@ function parseInstructionsFromMarkdown(text){
 }
 
 function parseTimeMinutesFromMarkdown(text){
-  // Catches a plainly labeled line like "Tillagningstid: 45 min" or "Tillagningstid: 1 tim 30 min"
-  // when there's no schema.org data — only matches the explicit Swedish label, never a bare number.
+  // Catches a plainly labeled line like "Tillagningstid: 45 min", "Tillagningstid: 1 tim 30 min"
+  // or "Tillagningstid: 1,5 tim" when there's no schema.org data — only matches the explicit
+  // Swedish label, never a bare number.
   const m = text.match(/tillagningstid:?\s*([^\n]+)/i);
   if(!m) return null;
   const segment = m[1];
-  const h = segment.match(/(\d+)\s*tim/i);
+  const h = segment.match(/(\d+(?:[,.]\d+)?)\s*tim/i);
   const mins = segment.match(/(\d+)\s*min/i);
-  const total = (h ? parseInt(h[1], 10) * 60 : 0) + (mins ? parseInt(mins[1], 10) : 0);
-  return total > 0 ? total : null;
+  const total = (h ? parseFloat(h[1].replace(',', '.')) * 60 : 0) + (mins ? parseInt(mins[1], 10) : 0);
+  return total > 0 ? Math.round(total) : null;
 }
 
 function parseServingsFromMarkdown(text){
