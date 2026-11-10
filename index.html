@@ -2206,7 +2206,7 @@ function stripMarkdownLinks(s){
   // sites also render a per-step/-ingredient checkbox, which Jina turns into a
   // leading GFM task-list marker ("[x] " or "[ ] ") — strip that too.
   return s
-    .replace(/^\[[ xX]\]\s*/, '')
+    .replace(/^-?\s*\[[ xX]\]\s*/, '')
     .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/\s+/g, ' ')
@@ -2225,7 +2225,15 @@ function parseIngredientsFromMarkdown(text){
   for(let i = startIdx + 1; i < lines.length; i++){
     const line = lines[i].trim();
     if(!line) continue; // some renderers put a blank line between each list item
-    if(/^#{1,6}\s/.test(line)) break;
+    if(/^#{1,6}\s/.test(line)){
+      // Some sites split the list with a sub-heading (e.g. "Tillbehör") instead of
+      // ending it there — keep going if real list items still follow it.
+      let j = i + 1;
+      while(j < lines.length && !lines[j].trim()) j++;
+      const next = j < lines.length ? lines[j].trim() : '';
+      if(/^\|(.+)\|$/.test(next) || /^[-*•]\s+/.test(next) || /^\d+[.)]\s+/.test(next)) continue;
+      break;
+    }
     const tableMatch = line.match(/^\|(.+)\|$/);
     if(tableMatch){
       const cells = tableMatch[1].split('|').map(c => stripMarkdownLinks(c)).filter(Boolean);
@@ -2252,7 +2260,15 @@ function parseInstructionsFromMarkdown(text){
   for(let i = startIdx + 1; i < lines.length; i++){
     const line = lines[i].trim();
     if(!line) continue; // some renderers put a blank line between each list item
-    if(/^#{1,6}\s/.test(line)) break;
+    if(/^#{1,6}\s/.test(line)){
+      // Some sites split the steps with a sub-heading (e.g. "Vid servering") instead
+      // of ending the list there — keep going if real list items still follow it.
+      let j = i + 1;
+      while(j < lines.length && !lines[j].trim()) j++;
+      const next = j < lines.length ? lines[j].trim() : '';
+      if(/^[-*•]\s+/.test(next) || /^\d+[.)]\s+/.test(next)) continue;
+      break;
+    }
     const m = line.match(/^[-*•]\s+(.+)$/) || line.match(/^\d+[.)]\s+(.+)$/);
     if(m) items.push(stripMarkdownLinks(m[1]));
     else if(items.length) break;
@@ -2280,11 +2296,14 @@ function parseServingsFromMarkdown(text){
   return m ? parseInt(m[1], 10) : null;
 }
 
-function parseMetaFromJinaText(text){
+function parseMetaFromJinaText(text, pageUrl){
   const m = text.match(/^Title:\s*(.+)$/m);
   const title = m ? m[1].trim() : null;
-  const imgMatch = text.match(/!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/);
-  const image = imgMatch ? imgMatch[1] : null;
+  // Jina sometimes emits a bogus leading "image" (e.g. the page's own URL, or a
+  // nav/UI icon) before the real photo, so scan all of them and prefer the first
+  // one that actually looks like a photo and isn't just the page itself.
+  const imgUrls = [...text.matchAll(/!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/g)].map(mm => mm[1]);
+  const image = imgUrls.find(u => u !== pageUrl && /\.(jpe?g|png|webp|gif)(\?.*)?$/i.test(u)) || null;
   const ingredients = parseIngredientsFromMarkdown(text);
   const instructions = parseInstructionsFromMarkdown(text);
   const timeMinutes = parseTimeMinutesFromMarkdown(text);
@@ -2321,7 +2340,7 @@ async function fetchLinkPreview(url){
     try{
       const text = await fetchViaProxy('https://r.jina.ai/' + url);
       if(text && text.length > 50){
-        const jinaInfo = parseMetaFromJinaText(text);
+        const jinaInfo = parseMetaFromJinaText(text, url);
         if(!best){
           if(jinaInfo.title || jinaInfo.image || (jinaInfo.ingredients && jinaInfo.ingredients.length) || (jinaInfo.instructions && jinaInfo.instructions.length) || jinaInfo.timeMinutes || jinaInfo.servings) best = jinaInfo;
         }else{
