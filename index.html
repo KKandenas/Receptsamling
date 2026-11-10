@@ -2202,8 +2202,11 @@ function parseMetaFromHtml(html, baseUrl){
 function stripMarkdownLinks(s){
   // Jina often wraps ingredient/step names in a product link (sometimes with a
   // thumbnail image nested inside it), e.g. "[![alt](imgurl) Namn](https://…)" —
-  // strip the markdown link/image syntax, keeping just the visible text.
+  // strip the markdown link/image syntax, keeping just the visible text. Some
+  // sites also render a per-step/-ingredient checkbox, which Jina turns into a
+  // leading GFM task-list marker ("[x] " or "[ ] ") — strip that too.
   return s
+    .replace(/^\[[ xX]\]\s*/, '')
     .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/\s+/g, ' ')
