@@ -2210,12 +2210,12 @@ function parseIngredientsFromMarkdown(text){
   // Some sites render their ingredient list as an HTML table (name + amount columns),
   // which Jina turns into a markdown table rather than a bullet list, so handle both.
   const lines = text.split('\n');
-  const startIdx = lines.findIndex(l => /^#{0,6}\s*ingrediens/i.test(l.trim()));
+  const startIdx = lines.findIndex(l => /^#{1,6}\s*ingrediens/i.test(l.trim()));
   if(startIdx === -1) return null;
   const items = [];
   for(let i = startIdx + 1; i < lines.length; i++){
     const line = lines[i].trim();
-    if(!line){ if(items.length) break; else continue; }
+    if(!line) continue; // some renderers put a blank line between each list item
     if(/^#{1,6}\s/.test(line)) break;
     const tableMatch = line.match(/^\|(.+)\|$/);
     if(tableMatch){
@@ -2237,18 +2237,37 @@ function parseInstructionsFromMarkdown(text){
   // Mirrors parseIngredientsFromMarkdown, but for the "Gör så här" / "Instruktioner"
   // style heading most recipe sites use for their step list.
   const lines = text.split('\n');
-  const startIdx = lines.findIndex(l => /^#{0,6}\s*(g[öo]r s[åa] h[äa]r|instruktioner?|tillagning|method|directions|steps)/i.test(l.trim()));
+  const startIdx = lines.findIndex(l => /^#{1,6}\s*(g[öo]r s[åa] h[äa]r|instruktioner?|tillagning|method|directions|steps)/i.test(l.trim()));
   if(startIdx === -1) return null;
   const items = [];
   for(let i = startIdx + 1; i < lines.length; i++){
     const line = lines[i].trim();
-    if(!line){ if(items.length) break; else continue; }
+    if(!line) continue; // some renderers put a blank line between each list item
     if(/^#{1,6}\s/.test(line)) break;
     const m = line.match(/^[-*•]\s+(.+)$/) || line.match(/^\d+[.)]\s+(.+)$/);
     if(m) items.push(stripMarkdownLinks(m[1]));
     else if(items.length) break;
   }
   return items.length ? items : null;
+}
+
+function parseTimeMinutesFromMarkdown(text){
+  // Catches a plainly labeled line like "Tillagningstid: 45 min" or "Tillagningstid: 1 tim 30 min"
+  // when there's no schema.org data — only matches the explicit Swedish label, never a bare number.
+  const m = text.match(/tillagningstid:?\s*([^\n]+)/i);
+  if(!m) return null;
+  const segment = m[1];
+  const h = segment.match(/(\d+)\s*tim/i);
+  const mins = segment.match(/(\d+)\s*min/i);
+  const total = (h ? parseInt(h[1], 10) * 60 : 0) + (mins ? parseInt(mins[1], 10) : 0);
+  return total > 0 ? total : null;
+}
+
+function parseServingsFromMarkdown(text){
+  // Catches a standalone line like "4 portioner" — requires the whole line to be just that,
+  // to avoid picking up an unrelated number (a rating count, a related recipe's time, etc).
+  const m = text.match(/^(\d+)\s*portioner?$/im);
+  return m ? parseInt(m[1], 10) : null;
 }
 
 function parseMetaFromJinaText(text){
@@ -2258,7 +2277,9 @@ function parseMetaFromJinaText(text){
   const image = imgMatch ? imgMatch[1] : null;
   const ingredients = parseIngredientsFromMarkdown(text);
   const instructions = parseInstructionsFromMarkdown(text);
-  return { title, image, ingredients, instructions };
+  const timeMinutes = parseTimeMinutesFromMarkdown(text);
+  const servings = parseServingsFromMarkdown(text);
+  return { title, image, ingredients, instructions, timeMinutes, servings };
 }
 
 async function fetchLinkPreview(url){
@@ -2292,10 +2313,12 @@ async function fetchLinkPreview(url){
       if(text && text.length > 50){
         const jinaInfo = parseMetaFromJinaText(text);
         if(!best){
-          if(jinaInfo.title || jinaInfo.image || (jinaInfo.ingredients && jinaInfo.ingredients.length) || (jinaInfo.instructions && jinaInfo.instructions.length)) best = jinaInfo;
+          if(jinaInfo.title || jinaInfo.image || (jinaInfo.ingredients && jinaInfo.ingredients.length) || (jinaInfo.instructions && jinaInfo.instructions.length) || jinaInfo.timeMinutes || jinaInfo.servings) best = jinaInfo;
         }else{
           if(!hasIngredients && jinaInfo.ingredients && jinaInfo.ingredients.length) best = { ...best, ingredients: jinaInfo.ingredients };
           if(!hasInstructions && jinaInfo.instructions && jinaInfo.instructions.length) best = { ...best, instructions: jinaInfo.instructions };
+          if(!best.timeMinutes && jinaInfo.timeMinutes) best = { ...best, timeMinutes: jinaInfo.timeMinutes };
+          if(!best.servings && jinaInfo.servings) best = { ...best, servings: jinaInfo.servings };
         }
       }
     }catch(e){ /* keep whatever the HTML proxies already found, if anything */ }
