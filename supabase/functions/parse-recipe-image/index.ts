@@ -10,8 +10,14 @@
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
 // Use the "-latest" alias rather than pinning a dated model name — Google
 // retires/renames dated model IDs fairly often, and this alias always
-// resolves to whatever the current stable Flash model is.
-const MODEL = 'gemini-flash-latest';
+// resolves to whatever the current stable model is.
+//
+// Flash-Lite instead of plain Flash: the regular Flash model still took the
+// full 45s and got cut off by our own abort even with thinkingBudget set to
+// 0 (so that setting either isn't honored by this model generation, or it
+// just genuinely needs that long) — Lite is built for low latency on exactly
+// this kind of straightforward extraction task.
+const MODEL = 'gemini-flash-lite-latest';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
