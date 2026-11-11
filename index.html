@@ -106,28 +106,6 @@
   .search::placeholder{ color:var(--panel-placeholder); }
   .search:focus{ outline:2px solid var(--ring); outline-offset:1px; border-color:transparent;}
 
-  .dashboard{ display:flex; flex-direction:column; gap:14px; margin:22px 0 4px; }
-  .dash-card{
-    background:var(--panel-bg); border:1px solid var(--panel-border); border-radius:10px;
-    padding:16px 18px;
-  }
-  .dash-card h3{
-    margin:0 0 10px; font-family:'Fraunces',serif; font-weight:600; font-size:16.5px; color:var(--panel-text);
-  }
-  .dash-empty{ color:var(--panel-placeholder); font-size:13.5px; }
-  .dash-plan-list{ display:flex; flex-direction:column; gap:6px; }
-  .dash-plan-row{ display:flex; align-items:baseline; gap:10px; cursor:pointer; padding:4px 0; }
-  .dash-plan-row:hover .dash-plan-name{ text-decoration:underline; }
-  .dash-plan-label{
-    font-family:'IBM Plex Mono',monospace; font-size:10.5px; text-transform:uppercase; letter-spacing:.05em;
-    color:var(--mustard); flex:0 0 auto; min-width:60px;
-  }
-  .dash-plan-name{ color:var(--panel-text); font-size:14.5px; }
-  .dash-strip{ display:flex; gap:14px; overflow-x:auto; padding-bottom:6px; margin:0 -2px; }
-  .dash-strip .card{ flex:0 0 190px; }
-  .dash-random-body{ display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
-  .dash-random-body .card{ flex:0 0 190px; }
-
   .btn{
     font-family:'Karla',sans-serif; font-weight:700; font-size:14px;
     border:none; border-radius:9px; padding:11px 18px; cursor:pointer;
@@ -511,21 +489,6 @@
     <p class="sub">Spara recept ni snappar upp var som helst ifrån — mejl, bild eller länk — på ett ställe ni båda kommer åt.</p>
     <div class="whoami" id="whoamiContainer"></div>
   </header>
-
-  <section class="dashboard" id="dashboard">
-    <div class="dash-card" id="dashPlanCard">
-      <h3>📅 Dagens meny</h3>
-      <div id="dashPlanContent"></div>
-    </div>
-    <div class="dash-card" id="dashRecentCard">
-      <h3>♥ Favoriter &amp; senast lagade</h3>
-      <div class="dash-strip" id="dashRecentContent"></div>
-    </div>
-    <div class="dash-card" id="dashRandomCard">
-      <h3>🎲 Vad blir det ikväll?</h3>
-      <div class="dash-random-body" id="dashRandomContent"></div>
-    </div>
-  </section>
 
   <div class="toolbar">
     <input class="search" id="searchInput" type="text" placeholder="Sök på receptnamn eller anteckning…">
@@ -1451,9 +1414,6 @@ async function loadRecipes(){
   await loadRatings();
   await loadFavorites();
   await loadComments();
-  // Needed up front now too, not just when switching to the weekplan scope —
-  // the dashboard's "dagens meny" widget is visible regardless of viewScope.
-  await loadMealPlan();
   renderTagBar();
   renderGrid();
 }
@@ -1584,90 +1544,7 @@ function buildRecipeCard(r, opts){
   return card;
 }
 
-let dashRandomRecipeId = null;
-
-function renderDashboardPlan(){
-  const content = document.getElementById('dashPlanContent');
-  if(!content) return;
-  const today = new Date();
-  const days = [
-    { label: 'Idag', date: today },
-    { label: 'Imorgon', date: addDays(today, 1) },
-  ];
-  const rows = days
-    .map(d => {
-      const entry = mealPlan.find(p => p.plan_date === isoDate(d.date));
-      const recipe = entry ? recipes.find(r => r.id === entry.recipe_id) : null;
-      return recipe ? { label: d.label, recipe } : null;
-    })
-    .filter(Boolean);
-  if(!rows.length){
-    content.innerHTML = `<div class="dash-empty">Inget planerat för idag eller imorgon — gå till veckoplanen för att lägga till.</div>`;
-    return;
-  }
-  const list = document.createElement('div');
-  list.className = 'dash-plan-list';
-  rows.forEach(({ label, recipe }) => {
-    const row = document.createElement('div');
-    row.className = 'dash-plan-row';
-    row.innerHTML = `<span class="dash-plan-label">${escapeHtml(label)}</span><span class="dash-plan-name">${escapeHtml(recipe.name)}</span>`;
-    row.onclick = () => openDetail(recipe.id);
-    list.appendChild(row);
-  });
-  content.innerHTML = '';
-  content.appendChild(list);
-}
-
-function renderDashboardRecent(){
-  const content = document.getElementById('dashRecentContent');
-  if(!content) return;
-  const favIds = currentUser
-    ? new Set(favorites.filter(f => f.user_id === currentUser.id).map(f => f.recipe_id))
-    : new Set();
-  const favRecipes = recipes.filter(r => favIds.has(r.id));
-  const recentRecipes = recipes
-    .filter(r => r.last_viewed_at && !favIds.has(r.id))
-    .sort((a, b) => new Date(b.last_viewed_at) - new Date(a.last_viewed_at));
-  const picks = favRecipes.concat(recentRecipes).slice(0, 8);
-  content.innerHTML = '';
-  if(!picks.length){
-    content.innerHTML = `<div class="dash-empty">Öppna eller favoritmärk ett recept för att se det här.</div>`;
-    return;
-  }
-  picks.forEach(r => content.appendChild(buildRecipeCard(r)));
-}
-
-function renderDashboardRandom(){
-  const content = document.getElementById('dashRandomContent');
-  if(!content) return;
-  content.innerHTML = '';
-  if(!recipes.length){
-    content.innerHTML = `<div class="dash-empty">Lägg till ett recept för att få förslag.</div>`;
-    return;
-  }
-  const pool = recipes.length > 1 ? recipes.filter(r => r.id !== dashRandomRecipeId) : recipes;
-  const pick = pool[Math.floor(Math.random() * pool.length)];
-  dashRandomRecipeId = pick.id;
-  content.appendChild(buildRecipeCard(pick));
-  const btn = document.createElement('button');
-  btn.className = 'btn btn-secondary';
-  btn.type = 'button';
-  btn.style.alignSelf = 'center';
-  btn.textContent = '🎲 Slumpa igen';
-  btn.onclick = () => renderDashboardRandom();
-  content.appendChild(btn);
-}
-
-function renderDashboard(){
-  renderDashboardPlan();
-  renderDashboardRecent();
-  // Only pick a suggestion once per session — re-rolling every time the grid
-  // re-renders (e.g. after toggling a favorite) would be a jarring surprise.
-  if(!dashRandomRecipeId) renderDashboardRandom();
-}
-
 function renderGrid(){
-  renderDashboard();
   if(viewScope === 'weekplan'){ renderWeekPlanGrid(); return; }
 
   const list = getFilteredSortedList();
