@@ -2687,7 +2687,7 @@ function openForm(id){
       const base64 = dataUrl.slice(comma + 1);
       const { data: info, error } = await withTimeout(
         sb.functions.invoke('parse-recipe-image', { body: { image: base64, mimeType } }),
-        45000,
+        60000,
         'Tog för lång tid att läsa av bilden (timeout) — kontrollera att funktionen är driftsatt och försök igen'
       );
       if(error){
