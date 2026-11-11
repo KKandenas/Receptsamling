@@ -2497,7 +2497,7 @@ function openForm(id){
           <label>Eller fotografera receptet (valfritt)</label>
           <div class="imgpick">
             <label class="filelabel" for="fRecipePhoto">Fotografera / välj bild</label>
-            <input type="file" id="fRecipePhoto" accept="image/*" capture="environment" style="display:none">
+            <input type="file" id="fRecipePhoto" accept="image/*" style="display:none">
           </div>
           <div id="photoFetchStatus" style="display:none; font-size:12.5px; margin-top:6px;"></div>
         </div>
@@ -2663,6 +2663,13 @@ function openForm(id){
     });
   }
 
+  function withTimeout(promise, ms, message){
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms)),
+    ]);
+  }
+
   document.getElementById('fRecipePhoto').onchange = async (e) => {
     const file = (e.target.files || [])[0];
     e.target.value = '';
@@ -2674,14 +2681,26 @@ function openForm(id){
       // Bigger and higher quality than the thumbnail resize above — this copy
       // is only sent to Gemini for OCR, never stored, so legibility matters
       // more than file size here.
-      const dataUrl = await resizeToDataUrl(file, 1600, 0.85);
+      const dataUrl = await withTimeout(resizeToDataUrl(file, 1600, 0.85), 20000, 'Tog för lång tid att bearbeta bilden (timeout)');
       const comma = dataUrl.indexOf(',');
       const mimeType = dataUrl.slice(5, dataUrl.indexOf(';'));
       const base64 = dataUrl.slice(comma + 1);
-      const { data: info, error } = await sb.functions.invoke('parse-recipe-image', {
-        body: { image: base64, mimeType }
-      });
-      if(error) throw error;
+      const { data: info, error } = await withTimeout(
+        sb.functions.invoke('parse-recipe-image', { body: { image: base64, mimeType } }),
+        45000,
+        'Tog för lång tid att läsa av bilden (timeout) — kontrollera att funktionen är driftsatt och försök igen'
+      );
+      if(error){
+        let detail = error.message || 'okänt fel';
+        try{
+          const ctx = error.context;
+          if(ctx && typeof ctx.json === 'function'){
+            const body = await ctx.clone().json();
+            if(body && body.error) detail = body.error;
+          }
+        }catch(_){ /* keep the generic message if the body can't be parsed */ }
+        throw new Error(detail);
+      }
       if(info && info.error) throw new Error(info.error);
 
       const nameInput = document.getElementById('fName');
