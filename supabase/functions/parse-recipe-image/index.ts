@@ -77,10 +77,6 @@ Deno.serve(async (req) => {
             generationConfig: {
               responseMimeType: 'application/json',
               responseSchema: RECIPE_SCHEMA,
-              // The current Flash models default to an extended "thinking" pass,
-              // which adds a lot of latency for a straightforward OCR/structuring
-              // task like this one — turn it off to keep response times sane.
-              thinkingConfig: { thinkingBudget: 0 },
             },
           }),
         }
