@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
     // egen deadline här skulle funktionen bara köra tills plattformen dödar
     // den, utan att klienten eller loggarna får veta varför.
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 25000);
+    const timeout = setTimeout(() => controller.abort(), 45000);
     let geminiRes;
     try {
       geminiRes = await fetch(
@@ -71,13 +71,17 @@ Deno.serve(async (req) => {
             generationConfig: {
               responseMimeType: 'application/json',
               responseSchema: RECIPE_SCHEMA,
+              // The current Flash models default to an extended "thinking" pass,
+              // which adds a lot of latency for a straightforward OCR/structuring
+              // task like this one — turn it off to keep response times sane.
+              thinkingConfig: { thinkingBudget: 0 },
             },
           }),
         }
       );
     } catch (fetchErr) {
       if (fetchErr instanceof Error && fetchErr.name === 'AbortError') {
-        throw new Error('Gemini svarade inte inom 25 sekunder (timeout)');
+        throw new Error('Gemini svarade inte inom 45 sekunder (timeout)');
       }
       throw fetchErr;
     } finally {
