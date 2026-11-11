@@ -38,30 +38,49 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
+  console.log('parse-recipe-image: request received');
   try {
     if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY är inte konfigurerad på servern');
     const { image, mimeType } = await req.json();
     if (!image || typeof image !== 'string') throw new Error('Ingen bild skickades med');
+    console.log(`parse-recipe-image: bild mottagen (${image.length} tecken base64, ${mimeType || 'image/jpeg'}), anropar Gemini…`);
 
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              { text: PROMPT },
-              { inline_data: { mime_type: mimeType || 'image/jpeg', data: image } },
-            ],
-          }],
-          generationConfig: {
-            responseMimeType: 'application/json',
-            responseSchema: RECIPE_SCHEMA,
-          },
-        }),
+    // Gemini-anropet kan i värsta fall hänga (nätverk, Googles sida) — utan en
+    // egen deadline här skulle funktionen bara köra tills plattformen dödar
+    // den, utan att klienten eller loggarna får veta varför.
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25000);
+    let geminiRes;
+    try {
+      geminiRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({
+            contents: [{
+              parts: [
+                { text: PROMPT },
+                { inline_data: { mime_type: mimeType || 'image/jpeg', data: image } },
+              ],
+            }],
+            generationConfig: {
+              responseMimeType: 'application/json',
+              responseSchema: RECIPE_SCHEMA,
+            },
+          }),
+        }
+      );
+    } catch (fetchErr) {
+      if (fetchErr instanceof Error && fetchErr.name === 'AbortError') {
+        throw new Error('Gemini svarade inte inom 25 sekunder (timeout)');
       }
-    );
+      throw fetchErr;
+    } finally {
+      clearTimeout(timeout);
+    }
+    console.log(`parse-recipe-image: svar från Gemini, status ${geminiRes.status}`);
 
     if (!geminiRes.ok) {
       const errText = await geminiRes.text();
@@ -73,10 +92,12 @@ Deno.serve(async (req) => {
     if (!text) throw new Error('Fick inget tolkningsbart svar från Gemini');
 
     const recipe = JSON.parse(text);
+    console.log('parse-recipe-image: klar, skickar tillbaka tolkat recept');
     return new Response(JSON.stringify(recipe), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (e) {
+    console.log('parse-recipe-image: fel —', e instanceof Error ? e.message : String(e));
     return new Response(
       JSON.stringify({ error: e instanceof Error ? e.message : String(e) }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
