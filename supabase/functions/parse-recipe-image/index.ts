@@ -8,7 +8,10 @@
 // Requires the GEMINI_API_KEY secret to already be set on the project.
 
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
-const MODEL = 'gemini-2.0-flash';
+// Use the "-latest" alias rather than pinning a dated model name — Google
+// retires/renames dated model IDs fairly often, and this alias always
+// resolves to whatever the current stable Flash model is.
+const MODEL = 'gemini-flash-latest';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
