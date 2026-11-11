@@ -2494,6 +2494,14 @@ function openForm(id){
           <div id="linkFetchStatus" style="display:none; font-size:12.5px; margin-top:6px;"></div>
         </div>
         <div class="field">
+          <label>Eller fotografera receptet (valfritt)</label>
+          <div class="imgpick">
+            <label class="filelabel" for="fRecipePhoto">Fotografera / välj bild</label>
+            <input type="file" id="fRecipePhoto" accept="image/*" capture="environment" style="display:none">
+          </div>
+          <div id="photoFetchStatus" style="display:none; font-size:12.5px; margin-top:6px;"></div>
+        </div>
+        <div class="field">
           <label for="fText">Anteckning / receptext (valfritt)</label>
           <textarea id="fText" placeholder="Klistra in eller skriv receptet, eller lägg till en kommentar…">${existing && existing.note ? escapeHtml(existing.note) : ''}</textarea>
         </div>
@@ -2633,20 +2641,19 @@ function openForm(id){
     fetchBtn.disabled = false; fetchBtn.textContent = 'Hämta info';
   };
 
-  function resizeToDataUrl(file){
+  function resizeToDataUrl(file, maxDim = 900, quality = 0.72){
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (ev) => {
         const img = new Image();
         img.onload = () => {
-          const maxDim = 900;
           let w = img.width, h = img.height;
           if(w > h && w > maxDim){ h = h*(maxDim/w); w = maxDim; }
           else if(h > maxDim){ w = w*(maxDim/h); h = maxDim; }
           const canvas = document.createElement('canvas');
           canvas.width = w; canvas.height = h;
           canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-          resolve(canvas.toDataURL('image/jpeg', 0.72));
+          resolve(canvas.toDataURL('image/jpeg', quality));
         };
         img.onerror = reject;
         img.src = ev.target.result;
@@ -2655,6 +2662,61 @@ function openForm(id){
       reader.readAsDataURL(file);
     });
   }
+
+  document.getElementById('fRecipePhoto').onchange = async (e) => {
+    const file = (e.target.files || [])[0];
+    e.target.value = '';
+    if(!file) return;
+    const status = document.getElementById('photoFetchStatus');
+    status.style.display = ''; status.style.color = '#8C8262';
+    status.textContent = 'Läser av bilden…';
+    try{
+      // Bigger and higher quality than the thumbnail resize above — this copy
+      // is only sent to Gemini for OCR, never stored, so legibility matters
+      // more than file size here.
+      const dataUrl = await resizeToDataUrl(file, 1600, 0.85);
+      const comma = dataUrl.indexOf(',');
+      const mimeType = dataUrl.slice(5, dataUrl.indexOf(';'));
+      const base64 = dataUrl.slice(comma + 1);
+      const { data: info, error } = await sb.functions.invoke('parse-recipe-image', {
+        body: { image: base64, mimeType }
+      });
+      if(error) throw error;
+      if(info && info.error) throw new Error(info.error);
+
+      const nameInput = document.getElementById('fName');
+      const ingredientsInput = document.getElementById('fIngredients');
+      const instructionsInput = document.getElementById('fInstructions');
+      const timeInput = document.getElementById('fTime');
+      const servingsInput = document.getElementById('fServings');
+      if(info.title && !nameInput.value.trim()) nameInput.value = info.title;
+      if(info.ingredients && info.ingredients.length && !ingredientsInput.value.trim()){
+        ingredientsInput.value = info.ingredients.join('\n');
+      }
+      if(info.instructions && info.instructions.length && !instructionsInput.value.trim()){
+        instructionsInput.value = info.instructions.join('\n');
+      }
+      if(info.time_minutes && !timeInput.value.trim()) timeInput.value = info.time_minutes;
+      if(info.servings && !servingsInput.value.trim()) servingsInput.value = info.servings;
+
+      const found = [];
+      if(info.title) found.push('titel');
+      if(info.ingredients && info.ingredients.length) found.push(info.ingredients.length + ' ingredienser');
+      if(info.instructions && info.instructions.length) found.push(info.instructions.length + ' instruktionssteg');
+      if(info.time_minutes) found.push('tid');
+      if(info.servings) found.push('portioner');
+      if(!found.length){
+        status.textContent = 'Kunde inte läsa av något recept på bilden – fyll i manuellt.';
+        status.style.color = '#A8432B';
+      }else{
+        status.textContent = 'Klart! Fyllde i ' + found.join(', ') + ' — läs igenom och rätta vid behov.';
+        status.style.color = '#4B6B4E';
+      }
+    }catch(err){
+      status.textContent = 'Kunde inte läsa av bilden (' + (err.message || 'okänt fel') + '). Fyll i manuellt.';
+      status.style.color = '#A8432B';
+    }
+  };
 
   const fileInput = document.getElementById('fImage');
   fileInput.onchange = async (e) => {
