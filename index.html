@@ -293,6 +293,51 @@
     float:right; background:none; border:none; font-size:20px; cursor:pointer; color:var(--ink-soft);
     line-height:1; padding:4px;
   }
+
+  /* Receptdetalj: bildhuvud i samma stil som receptkorten, à la Mixly */
+  .modal.detail-modal{ padding:0; overflow:hidden; }
+  .detail-hero{ position:relative; aspect-ratio: 16/9; overflow:hidden; }
+  .detail-hero-img{ display:block; width:100%; height:100%; object-fit:cover; }
+  .detail-hero-placeholder{
+    width:100%; height:100%; display:flex; align-items:center; justify-content:center;
+    background:
+      repeating-linear-gradient(135deg, rgba(140,130,98,.09) 0 2px, transparent 2px 14px),
+      linear-gradient(160deg, #F3ECDA, #EADFC0);
+    font-size:64px; opacity:.55;
+  }
+  .detail-hero-fade{
+    position:absolute; inset:0; pointer-events:none;
+    background: linear-gradient(to top, var(--card) 0%, rgba(20,14,8,.15) 40%, transparent 65%);
+  }
+  .detail-hero.no-photo .detail-hero-fade{
+    background: linear-gradient(to top, var(--card) 0%, rgba(243,236,218,.2) 45%, transparent 70%);
+  }
+  .hero-icon-btn{
+    position:absolute; top:12px; width:36px; height:36px; border-radius:50%; z-index:2;
+    background:rgba(20,14,8,.45); backdrop-filter: blur(3px); color:#FBF6E9; border:none;
+    display:flex; align-items:center; justify-content:center; font-size:16px; cursor:pointer;
+    transition: transform .12s ease, background .12s ease;
+  }
+  .hero-icon-btn:hover{ transform:scale(1.08); background:rgba(20,14,8,.6); }
+  .hero-close{ left:12px; }
+  .hero-fav{ right:12px; }
+  .hero-fav.active{ color:#E7A35C; }
+  .detail-hero.no-photo .hero-icon-btn{
+    background:rgba(255,253,246,.88); color:var(--ink-soft); border:1px solid var(--card-edge);
+  }
+  .detail-hero.no-photo .hero-icon-btn:hover{ background:rgba(255,253,246,1); }
+  .detail-hero.no-photo .hero-fav.active{ color:var(--brick); }
+  .detail-hero-overlay{ position:absolute; inset-inline:0; bottom:0; padding:16px 22px 14px; z-index:1; }
+  .detail-hero-overlay h2{ color:#FBF6E9; }
+  .detail-hero-overlay .detail-tags{ margin:0 0 6px; }
+  .detail-hero-overlay .detail-tags .tag-pill{ background:rgba(255,255,255,.16); color:#FBF6E9; border-color:rgba(255,255,255,.22); }
+  .detail-hero-overlay .detail-owner{ color:rgba(251,246,233,.75); margin-bottom:0; }
+  .detail-hero.no-photo .detail-hero-overlay h2{ color:var(--ink); }
+  .detail-hero.no-photo .detail-hero-overlay .detail-tags .tag-pill{ background:#EFE7CE; color:#6B5A2E; border-color:#E0D3A8; }
+  .detail-hero.no-photo .detail-hero-overlay .detail-owner{ color:#9C947C; }
+  .detail-body{ padding:20px 24px 24px; }
+  .detail-meta{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8C8262; }
+
   .field{ margin-bottom:16px; }
   .field label{
     display:block; font-family:'IBM Plex Mono',monospace; font-size:10.5px;
@@ -1668,15 +1713,25 @@ function openDetail(id){
   const isMine = r.owner_id === (currentUser && currentUser.id);
   const stats = ratingStatsFor(r.id);
   const myRating = myRatingFor(r.id);
+  const imgs = imagesOf(r);
+  const hasImage = imgs.length > 0;
+  const galleryRest = imgs.slice(1);
   modalRoot.innerHTML = `
     <div class="overlay" id="ovDetail">
-      <div class="modal">
-        <button class="modal-close" id="closeDetail" aria-label="Stäng">✕</button>
-        <button class="modal-close" id="favToggleDetail" type="button" style="color:${isFavorited(r.id) ? 'var(--brick)' : 'var(--ink-soft)'};" aria-label="${isFavorited(r.id) ? 'Ta bort favorit' : 'Lägg till favorit'}">${isFavorited(r.id) ? '♥' : '♡'}</button>
-        <div class="detail-owner">${escapeHtml(ownerName(r.owner_id))}s recept</div>
-        <h2>${escapeHtml(r.name)}</h2>
-        <div class="detail-tags">${(r.tags||[]).map(t=>`<span class="tag-pill">${escapeHtml(t)}</span>`).join('')}</div>
-        ${(r.time_minutes || r.servings) ? `<div class="card-time" style="margin-bottom:8px;">${[r.time_minutes ? `⏱ ${r.time_minutes} min` : '', r.servings ? `🍽 ${r.servings} portioner` : ''].filter(Boolean).join(' · ')}</div>` : ''}
+      <div class="modal detail-modal">
+        <div class="detail-hero${hasImage ? '' : ' no-photo'}">
+          ${hasImage ? `<img class="detail-hero-img" src="${imgs[0]}" alt="">` : `<div class="detail-hero-placeholder" aria-hidden="true">🍲</div>`}
+          <div class="detail-hero-fade"></div>
+          <button class="hero-icon-btn hero-close" id="closeDetail" aria-label="Stäng">✕</button>
+          <button class="hero-icon-btn hero-fav${isFavorited(r.id) ? ' active' : ''}" id="favToggleDetail" type="button" aria-label="${isFavorited(r.id) ? 'Ta bort favorit' : 'Lägg till favorit'}">${isFavorited(r.id) ? '♥' : '♡'}</button>
+          <div class="detail-hero-overlay">
+            ${(r.tags||[]).length ? `<div class="detail-tags">${r.tags.map(t=>`<span class="tag-pill">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
+            <h2>${escapeHtml(r.name)}</h2>
+            <div class="detail-owner">${escapeHtml(ownerName(r.owner_id))}s recept</div>
+          </div>
+        </div>
+        <div class="detail-body">
+        ${(r.time_minutes || r.servings) ? `<div class="detail-meta" style="margin-bottom:8px;">${[r.time_minutes ? `⏱ ${r.time_minutes} min` : '', r.servings ? `🍽 ${r.servings} portioner` : ''].filter(Boolean).join(' · ')}</div>` : ''}
         ${isMine && recipeStatus(r) !== 'full' ? `
           <div class="status-note">
             <span>${recipeStatus(r) === 'link_only' ? 'Det här receptet är bara en sparad länk ännu.' : 'Det här receptet är inte komplett ännu.'}</span>
@@ -1692,7 +1747,7 @@ function openDetail(id){
             ${[1,2,3,4,5].map(i => `<button type="button" class="star-btn${i<=myRating ? ' filled':''}" data-val="${i}" aria-label="${i} stjärnor">★</button>`).join('')}
           </div>
         </div>
-        ${imagesOf(r).length ? `<div class="detail-gallery">${imagesOf(r).map((src,i) => `<img src="${src}" alt="" data-idx="${i}">`).join('')}</div>` : ''}
+        ${galleryRest.length ? `<div class="detail-gallery">${galleryRest.map((src,i) => `<img src="${src}" alt="" data-idx="${i+1}">`).join('')}</div>` : ''}
         ${r.link ? `<div><a class="detail-link" href="${r.link}" target="_blank" rel="noopener">${escapeHtml(r.link)}</a></div>` : ''}
         ${r.ingredients && r.ingredients.length ? `<div class="detail-rating-label" style="margin-top:14px;">Ingredienser</div><ul class="detail-ingredients">${r.ingredients.map(ing => `<li>${escapeHtml(ing)}</li>`).join('')}</ul>` : ''}
         ${r.instructions && r.instructions.length ? `<div class="detail-rating-label" style="margin-top:14px;">Instruktioner</div><ol class="detail-instructions">${r.instructions.map(step => `<li>${escapeHtml(step)}</li>`).join('')}</ol>` : ''}
@@ -1711,6 +1766,7 @@ function openDetail(id){
             : `<span></span><div class="right"><button class="btn btn-primary" id="copyBtn">Kopiera till min receptlåda</button></div>`
           }
         </div>
+        </div>
       </div>
     </div>
   `;
@@ -1723,9 +1779,8 @@ function openDetail(id){
   modalRoot.querySelectorAll('#myStars .star-btn').forEach(btn => {
     btn.onclick = () => setMyRating(r.id, Number(btn.dataset.val));
   });
-  const galleryImgs = imagesOf(r);
   modalRoot.querySelectorAll('.detail-gallery img').forEach(img => {
-    img.onclick = () => openLightbox(galleryImgs, Number(img.dataset.idx));
+    img.onclick = () => openLightbox(imgs, Number(img.dataset.idx));
   });
   modalRoot.querySelectorAll('.comment-delete').forEach(btn => {
     btn.onclick = () => deleteComment(btn.dataset.id, r.id);
