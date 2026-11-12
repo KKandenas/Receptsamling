@@ -2262,6 +2262,38 @@ function loadImageEl(src){
   });
 }
 
+// Receptbilder är antingen lokalt uppladdade (sparade som data-URL) eller
+// hämtade från en receptsida vid länkimport (sparade som en vanlig
+// https-URL, t.ex. sidans og:image). En sådan extern bild kan inte läsas
+// in i en <canvas> för beskärning pga CORS, så vi hämtar bytes via samma
+// proxykedja som används för att läsa in receptsidans HTML och gör om den
+// till en data-URL själva innan den beskärs.
+async function fetchImageAsDataUrl(url){
+  const candidates = [
+    url,
+    'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
+    'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url),
+  ];
+  for(const candidateUrl of candidates){
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    try{
+      const res = await fetch(candidateUrl, { signal: controller.signal });
+      if(!res.ok) continue;
+      const blob = await res.blob();
+      if(!blob.type.startsWith('image/')) continue;
+      return await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    }catch(e){ /* försök nästa källa */ }
+    finally{ clearTimeout(timeout); }
+  }
+  return null;
+}
+
 // Beskär bilden (center-crop) till bannerns bildförhållande så den fyller
 // ytan utan att bli utsträckt eller ihoptryckt, likt object-fit:cover.
 async function coverCropDataUrl(dataUrl, targetRatio){
@@ -2403,10 +2435,11 @@ async function exportRecipeBook(ids){
       if(idx > 0) doc.addPage();
       let bannerImg = null;
       const imgs = imagesOf(r);
-      const fmtMatch = imgs[0] && /^data:image\/(png|jpe?g|webp|gif)/i.exec(imgs[0]);
-      if(fmtMatch){
-        try{ bannerImg = await coverCropDataUrl(imgs[0], maxWidth / bannerH); }
-        catch(e){ bannerImg = null; }
+      if(imgs[0]){
+        try{
+          const src = /^data:image\//i.test(imgs[0]) ? imgs[0] : await fetchImageAsDataUrl(imgs[0]);
+          if(src) bannerImg = await coverCropDataUrl(src, maxWidth / bannerH);
+        }catch(e){ bannerImg = null; }
       }
       drawRecipeBookPage(doc, r, { pageWidth, pageHeight, margin, maxWidth, bannerH, bannerImg });
     }
