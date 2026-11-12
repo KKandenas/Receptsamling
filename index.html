@@ -173,9 +173,9 @@
   .err-box{ color:var(--err); }
 
   .card{
-    position:relative; background:var(--card); color:var(--ink);
-    border-radius:6px; padding:18px 17px 16px; cursor:pointer;
-    box-shadow: 0 10px 22px rgba(0,0,0,.28), 0 2px 0 var(--card-edge);
+    position:relative; border-radius:10px; cursor:pointer; overflow:hidden;
+    aspect-ratio: 4/5; background:var(--card);
+    box-shadow: 0 10px 22px rgba(0,0,0,.28);
     transform: rotate(var(--r,0deg));
     transition: transform .18s cubic-bezier(.2,.8,.3,1), box-shadow .18s ease;
     border:1px solid var(--card-edge);
@@ -185,14 +185,8 @@
   .card:nth-child(3n+2){ --r:-0.2deg; }
   .card:hover{ transform: rotate(0deg) translateY(-4px); box-shadow: 0 18px 32px rgba(0,0,0,.36); }
   .card:focus-visible{ outline:2px solid var(--mustard-deep); outline-offset:3px; }
-  .pin{
-    position:absolute; top:-7px; left:50%; transform:translateX(-50%);
-    width:12px; height:12px; border-radius:50%;
-    background: radial-gradient(circle at 35% 30%, #d8cfb4, var(--pin));
-    box-shadow: 0 2px 3px rgba(0,0,0,.35);
-  }
   .fav-btn{
-    position:absolute; top:10px; right:10px; width:30px; height:30px; border-radius:50%;
+    position:absolute; top:10px; right:10px; width:30px; height:30px; border-radius:50%; z-index:2;
     background:rgba(255,253,246,0.9); border:1px solid var(--card-edge); color:#C9BFA0;
     box-shadow: 0 2px 6px rgba(0,0,0,.18);
     font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center;
@@ -201,11 +195,12 @@
   .fav-btn:hover{ transform:scale(1.1); }
   .fav-btn.active{ color: var(--brick); }
   .plan-card-day{
-    font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.05em; text-transform:uppercase;
-    color: var(--mustard-deep); font-weight:700; margin:26px 0 6px;
+    position:absolute; top:10px; left:50%; transform:translateX(-50%); z-index:2; white-space:nowrap;
+    font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.05em; text-transform:uppercase;
+    color:#FBF6E9; font-weight:700; background:rgba(42,38,32,.65); padding:4px 10px; border-radius:20px;
   }
   .plan-card-remove{
-    position:absolute; top:10px; left:10px; width:30px; height:30px; border-radius:50%;
+    position:absolute; top:10px; left:10px; width:30px; height:30px; border-radius:50%; z-index:2;
     background:rgba(255,253,246,0.85); border:1px solid var(--card-edge); color:var(--brick);
     font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center;
     transition: transform .12s ease;
@@ -213,50 +208,61 @@
   .plan-card-remove:hover{ transform:scale(1.08); }
   .plan-card-empty{
     display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px;
-    min-height:180px; border:1.5px dashed var(--card-edge); background:transparent; box-shadow:none; cursor:default;
+    border:1.5px dashed var(--card-edge); background:transparent; box-shadow:none; cursor:default;
+    padding:18px;
   }
   .plan-card-empty:hover{ transform:none; box-shadow:none; }
-  .card-thumb-wrap{
-    position:relative; margin-bottom:12px; border-radius:5px; overflow:hidden;
-  }
-  .card-thumb{
-    display:block; width:100%; height:120px; object-fit:cover;
+  .card-bg{
+    display:block; position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
     filter: saturate(0.98); transition: transform .3s ease;
   }
-  .card:hover .card-thumb{ transform: scale(1.04); }
-  .card-thumb-placeholder{
-    width:100%; height:120px; display:flex; align-items:center; justify-content:center;
+  .card:hover .card-bg{ transform: scale(1.04); }
+  .card-bg-placeholder{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
     background:
       repeating-linear-gradient(135deg, rgba(140,130,98,.09) 0 2px, transparent 2px 14px),
       linear-gradient(160deg, #F3ECDA, #EADFC0);
-    border:1px solid var(--card-edge);
-    font-size:30px; opacity:.6;
+    font-size:54px; opacity:.55;
   }
-  .card-thumb-badge{
-    position:absolute; bottom:6px; right:6px;
-    background:#2A2620; color:#FBF6E9; border:1px solid #2A2620;
-    font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.03em;
-    text-transform:uppercase; padding:3px 8px; border-radius:20px;
+  .card-gradient{
+    position:absolute; inset:0; pointer-events:none;
+    background: linear-gradient(to top, rgba(20,14,8,.88) 0%, rgba(20,14,8,.32) 45%, transparent 70%);
   }
+  .card-gradient.onlight{
+    background: linear-gradient(to top, rgba(251,246,233,.96) 0%, rgba(251,246,233,.5) 55%, transparent 85%);
+  }
+  .card-overlay{ position:absolute; inset-inline:0; bottom:0; padding:14px 15px 15px; z-index:1; }
+  .card-overlay.light-text{ color:#FBF6E9; }
+  .card-overlay.dark-text{ color:var(--ink); }
   .card-name{
-    font-family:'Fraunces',serif; font-weight:600; font-size:19px; line-height:1.2;
-    margin:0 0 8px;
+    font-family:'Fraunces',serif; font-weight:600; font-size:18px; line-height:1.2;
+    margin:0 0 5px;
   }
-  .card-meta{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
+  .card-meta{ display:flex; flex-wrap:wrap; gap:5px; margin-bottom:7px; }
   .tag-pill{
     font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.03em;
     text-transform:uppercase; padding:3px 8px; border-radius:20px;
     background:#EFE7CE; color:#6B5A2E; border:1px solid #E0D3A8;
   }
-  .card-snippet{ font-size:13px; color:var(--ink-soft); line-height:1.4;
-    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
-  .card-source{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8C8262; margin-top:10px; }
+  .light-text .tag-pill{ background:rgba(255,255,255,.16); color:#FBF6E9; border-color:rgba(255,255,255,.22); }
+  .card-owner{
+    font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.03em;
+    margin-bottom:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .light-text .card-owner{ color:rgba(251,246,233,.75); }
+  .dark-text .card-owner{ color:#8C8262; }
+  .card-source{ font-family:'IBM Plex Mono',monospace; font-size:10px; }
+  .light-text .card-source{ color:rgba(251,246,233,.65); }
+  .dark-text .card-source{ color:#8C8262; }
 
   .stars-row{ display:flex; align-items:center; gap:6px; }
   .stars-glyphs{ color:var(--mustard-deep); letter-spacing:2px; font-size:14px; }
   .stars-count{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8C8262; }
   .stars-empty .stars-glyphs{ color:#D8CDA8; }
-  .card-stars{ margin-bottom:8px; }
+  .card-stars{ margin-bottom:6px; }
+  .light-text .stars-glyphs{ color: var(--mustard); }
+  .light-text .stars-empty .stars-glyphs{ color: rgba(255,255,255,.35); }
+  .light-text .stars-count{ color: rgba(251,246,233,.65); }
   .stars-interactive{ gap:2px; }
   .star-btn{
     background:none; border:none; font-size:24px; line-height:1; padding:2px; cursor:pointer;
@@ -452,14 +458,9 @@
     background:var(--panel-bg); border:1px solid var(--panel-border); border-radius:6px; color:var(--panel-text);
     font-family:'Karla',sans-serif; font-size:13px; padding:5px 9px; width:160px;
   }
-  .card-owner{
-    font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:.05em; text-transform:uppercase;
-    color:#9C947C; margin-top:4px;
-  }
-  .card-time{
-    font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8C8262; margin-top:4px;
-  }
-  .card-status{ color:#B98526; font-style:italic; }
+  .card-status{ font-style:italic; }
+  .light-text .card-status{ color: var(--mustard); }
+  .dark-text .card-status{ color:#B98526; }
   .status-note{
     font-size:13px; color:#6B5A2E; background:#EFE7CE; border:1px solid #E0D3A8;
     border-radius:8px; padding:10px 12px; margin:12px 0; display:flex; align-items:center;
@@ -1488,12 +1489,6 @@ function matchesFilters(r){
   return textOk && tagOk && scopeOk;
 }
 
-function snippetFor(r){
-  if(r.note) return r.note;
-  if(r.link) return r.link;
-  return 'Inget innehåll utöver bild.';
-}
-
 function imagesOf(r){
   if(r.images && r.images.length) return r.images;
   if(r.image) return [r.image];
@@ -1536,6 +1531,7 @@ function buildRecipeCard(r, opts){
   opts = opts || {};
   const imgs = imagesOf(r);
   const stats = ratingStatsFor(r.id);
+  const hasImage = !!imgs[0];
   const card = document.createElement('div');
   card.className = 'card';
   card.tabIndex = 0;
@@ -1543,30 +1539,36 @@ function buildRecipeCard(r, opts){
   card.onclick = () => openDetail(r.id);
   card.onkeydown = (e) => { if(e.key === 'Enter' && e.target === card) openDetail(r.id); };
 
-  const thumbHtml = imgs[0]
-    ? `<div class="card-thumb-wrap"><img class="card-thumb" src="${imgs[0]}" alt="">${imgs.length > 1 ? `<span class="card-thumb-badge">+${imgs.length - 1}</span>` : ''}</div>`
-    : `<div class="card-thumb-wrap"><div class="card-thumb-placeholder" aria-hidden="true">🍲</div></div>`;
+  const bgHtml = hasImage
+    ? `<img class="card-bg" src="${imgs[0]}" alt="">`
+    : `<div class="card-bg-placeholder" aria-hidden="true">🍲</div>`;
+
+  const metaParts = [];
+  if(r.time_minutes) metaParts.push(`⏱ ${r.time_minutes} min`);
+  if(r.servings) metaParts.push(`🍽 ${r.servings} port.`);
+  const metaLine = `${escapeHtml(ownerName(r.owner_id))}s recept${metaParts.length ? ' · ' + metaParts.join(' · ') : ''}`;
 
   const sourceParts = [];
   if(r.link) sourceParts.push('🔗 länk');
-  if(imgs.length) sourceParts.push('🖼 bild');
+  if(imgs.length === 1) sourceParts.push('🖼 bild');
+  else if(imgs.length > 1) sourceParts.push(`🖼 ${imgs.length} bilder`);
   if(!r.link && !imgs.length) sourceParts.push('📝 anteckning');
   const statusLabel = RECIPE_STATUS_LABEL[recipeStatus(r)];
   if(statusLabel) sourceParts.push(`<span class="card-status">${statusLabel}</span>`);
 
   card.innerHTML = `
-    <div class="pin"></div>
+    ${bgHtml}
+    <div class="card-gradient${hasImage ? '' : ' onlight'}"></div>
     <button class="fav-btn${isFavorited(r.id) ? ' active' : ''}" type="button" aria-label="${isFavorited(r.id) ? 'Ta bort favorit' : 'Lägg till favorit'}">${isFavorited(r.id) ? '♥' : '♡'}</button>
     ${opts.onRemove ? `<button class="plan-card-remove" type="button" aria-label="Ta bort från veckoplanen">✕</button>` : ''}
     ${opts.dayLabel ? `<div class="plan-card-day">${escapeHtml(opts.dayLabel)}</div>` : ''}
-    ${thumbHtml}
-    <div class="card-name">${escapeHtml(r.name)}</div>
-    <div class="card-owner">${escapeHtml(ownerName(r.owner_id))}s recept</div>
-    ${(r.time_minutes || r.servings) ? `<div class="card-time">${[r.time_minutes ? `⏱ ${r.time_minutes} min` : '', r.servings ? `🍽 ${r.servings} port.` : ''].filter(Boolean).join(' · ')}</div>` : ''}
-    <div class="card-stars">${starsMarkupReadonly(stats.avg, stats.count)}</div>
-    ${(r.tags||[]).length ? `<div class="card-meta">${r.tags.map(t => `<span class="tag-pill">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
-    <div class="card-snippet">${escapeHtml(snippetFor(r))}</div>
-    <div class="card-source">${sourceParts.join(' · ')}</div>
+    <div class="card-overlay${hasImage ? ' light-text' : ' dark-text'}">
+      ${(r.tags||[]).length ? `<div class="card-meta">${r.tags.map(t => `<span class="tag-pill">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
+      <div class="card-name">${escapeHtml(r.name)}</div>
+      <div class="card-owner">${metaLine}</div>
+      <div class="card-stars">${starsMarkupReadonly(stats.avg, stats.count)}</div>
+      <div class="card-source">${sourceParts.join(' · ')}</div>
+    </div>
   `;
   card.querySelector('.fav-btn').onclick = (e) => { e.stopPropagation(); toggleFavorite(r.id); };
   if(opts.onRemove){
