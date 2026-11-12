@@ -1834,10 +1834,15 @@ function openDetail(id){
       </div>
     </div>
   `;
-  document.getElementById('closeDetail').onclick = closeModal;
+  document.getElementById('closeDetail').onclick = (e) => { e.stopPropagation(); closeModal(); };
   document.getElementById('ovDetail').onclick = (e) => { if(e.target.id === 'ovDetail') closeModal(); };
-  document.getElementById('favToggleDetail').onclick = () => toggleFavorite(r.id);
+  document.getElementById('favToggleDetail').onclick = (e) => { e.stopPropagation(); toggleFavorite(r.id); };
   document.getElementById('findSimilarBtn').onclick = () => openExplore(r.name);
+  if(hasImage){
+    const hero = modalRoot.querySelector('.detail-hero');
+    hero.style.cursor = 'pointer';
+    hero.onclick = () => openLightbox(imgs, 0);
+  }
   const completeBtn = document.getElementById('completeBtn');
   if(completeBtn) completeBtn.onclick = () => openForm(r.id);
   modalRoot.querySelectorAll('#myStars .star-btn').forEach(btn => {
