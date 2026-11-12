@@ -194,6 +194,16 @@
   }
   .fav-btn:hover{ transform:scale(1.1); }
   .fav-btn.active{ color: var(--brick); }
+  .select-check{
+    position:absolute; top:10px; right:10px; width:30px; height:30px; border-radius:50%; z-index:2;
+    background:rgba(255,253,246,0.9); border:1px solid var(--card-edge); color:transparent;
+    box-shadow: 0 2px 6px rgba(0,0,0,.18);
+    font-size:15px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    transition: transform .12s ease, background .12s ease;
+  }
+  .select-check:hover{ transform:scale(1.1); }
+  .select-check.checked{ background:var(--mustard-deep); color:#FBF6E9; border-color:var(--mustard-deep); }
+  .card.selected{ outline:3px solid var(--mustard-deep); outline-offset:-3px; }
   .plan-card-day{
     position:absolute; top:10px; left:50%; transform:translateX(-50%); z-index:2; white-space:nowrap;
     font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.05em; text-transform:uppercase;
@@ -466,6 +476,11 @@
   .sitesearch-btn{ flex:0 0 auto; white-space:nowrap; }
 
   .planbar{ display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:26px; }
+  .bookbar{
+    display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px;
+    background:var(--mustard); color:#251C0B; border-radius:10px; padding:12px 16px; margin-bottom:18px;
+    font-weight:600;
+  }
   .plan-range{ font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.04em; }
   .plan-day{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 0; border-bottom:1px solid #EDE4CC; }
   .picker-item{
@@ -542,6 +557,7 @@
       <button class="dropdown-item" id="backfillBtn" type="button">Hämta ingredienser</button>
       <button class="dropdown-item" id="exportBtn" type="button">Exportera recept</button>
       <button class="dropdown-item" id="exportPdfBtn" type="button">Exportera som PDF</button>
+      <button class="dropdown-item" id="makeBookBtn" type="button">📕 Skapa receptbok (PDF)</button>
     </div>
   </div>
   <button class="theme-toggle" id="themeToggleBtn" type="button" aria-label="Växla mellan mörkt och ljust läge">🌙</button>
@@ -554,6 +570,14 @@
     <p class="sub">Spara recept ni snappar upp var som helst ifrån — mejl, bild eller länk — på ett ställe ni båda kommer åt.</p>
     <div class="whoami" id="whoamiContainer"></div>
   </header>
+
+  <div class="bookbar" id="bookBar" style="display:none;">
+    <span id="bookCount">0 recept valda</span>
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <button class="btn btn-ghost" id="bookCancelBtn" type="button">Avbryt</button>
+      <button class="btn btn-primary" id="bookExportBtn" type="button" disabled>📕 Skapa PDF</button>
+    </div>
+  </div>
 
   <div class="toolbar">
     <input class="search" id="searchInput" type="text" placeholder="Sök på receptnamn eller anteckning…">
@@ -674,6 +698,8 @@ let viewScope = 'all'; // 'all' | 'mine' | 'favorites'
 let sortMode = 'recent'; // 'recent' | 'alpha' | 'rating'
 let activeTagFilters = new Set();
 let searchTerm = "";
+let bookSelectMode = false;
+let bookSelectedIds = new Set();
 
 function loadUserFromStorage(){
   try{
@@ -1446,6 +1472,7 @@ document.getElementById('scopeSelect').addEventListener('change', async (e) => {
   viewScope = e.target.value;
   updateScopeUI();
   if(viewScope === 'weekplan'){
+    if(bookSelectMode) exitBookSelectMode();
     await loadMealPlan();
     renderPlanTagFilter();
   }
@@ -1572,17 +1599,51 @@ function getFilteredSortedList(){
   });
 }
 
+function updateBookBar(){
+  const n = bookSelectedIds.size;
+  document.getElementById('bookCount').textContent = `${n} ${n === 1 ? 'recept valt' : 'recept valda'}`;
+  document.getElementById('bookExportBtn').disabled = n === 0;
+}
+
+function enterBookSelectMode(){
+  bookSelectMode = true;
+  bookSelectedIds = new Set();
+  if(viewScope === 'weekplan'){
+    viewScope = 'all';
+    document.getElementById('scopeSelect').value = 'all';
+    updateScopeUI();
+  }
+  document.getElementById('bookBar').style.display = '';
+  updateBookBar();
+  renderGrid();
+}
+
+function exitBookSelectMode(){
+  bookSelectMode = false;
+  bookSelectedIds = new Set();
+  document.getElementById('bookBar').style.display = 'none';
+  renderGrid();
+}
+
+function toggleBookSelect(id){
+  if(bookSelectedIds.has(id)) bookSelectedIds.delete(id); else bookSelectedIds.add(id);
+  updateBookBar();
+  renderGrid();
+}
+
 function buildRecipeCard(r, opts){
   opts = opts || {};
   const imgs = imagesOf(r);
   const stats = ratingStatsFor(r.id);
   const hasImage = !!imgs[0];
+  const selecting = bookSelectMode;
+  const selected = bookSelectedIds.has(r.id);
   const card = document.createElement('div');
-  card.className = 'card';
+  card.className = 'card' + (selecting && selected ? ' selected' : '');
   card.tabIndex = 0;
   card.setAttribute('role','button');
-  card.onclick = () => openDetail(r.id);
-  card.onkeydown = (e) => { if(e.key === 'Enter' && e.target === card) openDetail(r.id); };
+  card.onclick = selecting ? () => toggleBookSelect(r.id) : () => openDetail(r.id);
+  card.onkeydown = (e) => { if(e.key === 'Enter' && e.target === card) card.onclick(); };
 
   const bgHtml = hasImage
     ? `<img class="card-bg" src="${imgs[0]}" alt="">`
@@ -1604,7 +1665,9 @@ function buildRecipeCard(r, opts){
   card.innerHTML = `
     ${bgHtml}
     <div class="card-gradient${hasImage ? '' : ' onlight'}"></div>
-    <button class="fav-btn${isFavorited(r.id) ? ' active' : ''}" type="button" aria-label="${isFavorited(r.id) ? 'Ta bort favorit' : 'Lägg till favorit'}">${isFavorited(r.id) ? '♥' : '♡'}</button>
+    ${selecting
+      ? `<div class="select-check${selected ? ' checked' : ''}" aria-hidden="true">${selected ? '✓' : ''}</div>`
+      : `<button class="fav-btn${isFavorited(r.id) ? ' active' : ''}" type="button" aria-label="${isFavorited(r.id) ? 'Ta bort favorit' : 'Lägg till favorit'}">${isFavorited(r.id) ? '♥' : '♡'}</button>`}
     ${opts.onRemove ? `<button class="plan-card-remove" type="button" aria-label="Ta bort från veckoplanen">✕</button>` : ''}
     ${opts.dayLabel ? `<div class="plan-card-day">${escapeHtml(opts.dayLabel)}</div>` : ''}
     <div class="card-overlay${hasImage ? ' light-text' : ' dark-text'}">
@@ -1615,7 +1678,9 @@ function buildRecipeCard(r, opts){
       <div class="card-source">${sourceParts.join(' · ')}</div>
     </div>
   `;
-  card.querySelector('.fav-btn').onclick = (e) => { e.stopPropagation(); toggleFavorite(r.id); };
+  if(!selecting){
+    card.querySelector('.fav-btn').onclick = (e) => { e.stopPropagation(); toggleFavorite(r.id); };
+  }
   if(opts.onRemove){
     card.querySelector('.plan-card-remove').onclick = (e) => { e.stopPropagation(); opts.onRemove(); };
   }
@@ -2183,6 +2248,178 @@ document.getElementById('exportPdfBtn').onclick = async () => {
   }
   setTimeout(() => { btn.disabled = false; btn.textContent = originalText; }, 2200);
 };
+
+document.getElementById('makeBookBtn').onclick = () => { closeMoreMenu(); enterBookSelectMode(); };
+document.getElementById('bookCancelBtn').onclick = () => exitBookSelectMode();
+document.getElementById('bookExportBtn').onclick = () => exportRecipeBook(Array.from(bookSelectedIds));
+
+function loadImageEl(src){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+// Beskär bilden (center-crop) till bannerns bildförhållande så den fyller
+// ytan utan att bli utsträckt eller ihoptryckt, likt object-fit:cover.
+async function coverCropDataUrl(dataUrl, targetRatio){
+  const img = await loadImageEl(dataUrl);
+  const srcRatio = img.width / img.height;
+  let sx = 0, sy = 0, sw = img.width, sh = img.height;
+  if(srcRatio > targetRatio){ sw = sh * targetRatio; sx = (img.width - sw) / 2; }
+  else{ sh = sw / targetRatio; sy = (img.height - sh) / 2; }
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(sw); canvas.height = Math.round(sh);
+  canvas.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', 0.85);
+}
+
+function drawRecipeBookPage(doc, r, ctx){
+  const { pageWidth, pageHeight, margin, maxWidth, bannerH, bannerImg } = ctx;
+  let y = margin;
+
+  if(bannerImg){
+    doc.addImage(bannerImg, 'JPEG', margin, y, maxWidth, bannerH);
+    y += bannerH + 18;
+  }
+
+  doc.setFont('times', 'bold');
+  doc.setFontSize(22);
+  const nameLines = doc.splitTextToSize(r.name, maxWidth);
+  doc.text(nameLines, margin, y + 16);
+  y += nameLines.length * 24 + 4;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(130);
+  const metaBits = [ownerName(r.owner_id) + 's recept'];
+  if(r.tags && r.tags.length) metaBits.push(r.tags.join(', '));
+  if(r.time_minutes) metaBits.push(`${r.time_minutes} min`);
+  if(r.servings) metaBits.push(`${r.servings} port.`);
+  doc.text(metaBits.join('   ·   '), margin, y);
+  doc.setTextColor(0);
+  y += 22;
+
+  doc.setDrawColor(200);
+  doc.setLineWidth(0.8);
+  doc.line(margin, y, pageWidth - margin, y);
+  y += 24;
+
+  const colGap = 24;
+  const colWidth = (maxWidth - colGap) / 2;
+  const leftX = margin;
+  const rightX = margin + colWidth + colGap;
+  const topY = y;
+
+  // Krymp texten lite för ovanligt långa recept, så det mesta ryms på en sida
+  // (ingen sidbrytning mitt i ett recept — boken ska ha ett recept per sida).
+  const totalLines = (r.ingredients || []).length + (r.instructions || []).length;
+  const bodyFontSize = totalLines > 26 ? 9.5 : totalLines > 18 ? 10 : 11;
+  const lineHeight = bodyFontSize + 3;
+
+  let ly = topY;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.text('INGREDIENSER', leftX, ly);
+  ly += 18;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(bodyFontSize);
+  if(r.ingredients && r.ingredients.length){
+    r.ingredients.forEach(ing => {
+      const lines = doc.splitTextToSize('•  ' + ing, colWidth);
+      doc.text(lines, leftX, ly);
+      ly += lines.length * lineHeight + 3;
+    });
+  }else{
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(150);
+    doc.text('Inga ingredienser sparade.', leftX, ly);
+    doc.setTextColor(0);
+    ly += lineHeight;
+  }
+
+  let ry = topY;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.text('GÖR SÅ HÄR', rightX, ry);
+  ry += 18;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(bodyFontSize);
+  if(r.instructions && r.instructions.length){
+    r.instructions.forEach((step, i) => {
+      const lines = doc.splitTextToSize(`${i + 1}.  ${step}`, colWidth);
+      doc.text(lines, rightX, ry);
+      ry += lines.length * lineHeight + 5;
+    });
+  }else{
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(150);
+    doc.text('Inga instruktioner sparade.', rightX, ry);
+    doc.setTextColor(0);
+    ry += lineHeight;
+  }
+
+  let noteBottom = Math.max(ly, ry);
+  if(r.note){
+    noteBottom += 16;
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(10);
+    doc.setTextColor(90);
+    const noteLines = doc.splitTextToSize(r.note, maxWidth);
+    doc.text(noteLines, margin, noteBottom);
+    doc.setTextColor(0);
+  }
+
+  if(r.link){
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9.5);
+    doc.setTextColor(30, 90, 160);
+    const shown = 'Originalrecept: ' + (r.link.length > 78 ? r.link.slice(0, 75) + '…' : r.link);
+    doc.textWithLink(shown, margin, pageHeight - margin, { url: r.link });
+    doc.setTextColor(0);
+  }
+}
+
+async function exportRecipeBook(ids){
+  const btn = document.getElementById('bookExportBtn');
+  const originalText = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Skapar PDF…';
+  try{
+    const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm');
+    const list = ids.map(id => recipes.find(r => r.id === id)).filter(Boolean);
+    if(!list.length) throw new Error('Inga recept valda');
+
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 48;
+    const maxWidth = pageWidth - margin * 2;
+    const bannerH = 170;
+
+    for(let idx = 0; idx < list.length; idx++){
+      const r = list[idx];
+      if(idx > 0) doc.addPage();
+      let bannerImg = null;
+      const imgs = imagesOf(r);
+      const fmtMatch = imgs[0] && /^data:image\/(png|jpe?g|webp|gif)/i.exec(imgs[0]);
+      if(fmtMatch){
+        try{ bannerImg = await coverCropDataUrl(imgs[0], maxWidth / bannerH); }
+        catch(e){ bannerImg = null; }
+      }
+      drawRecipeBookPage(doc, r, { pageWidth, pageHeight, margin, maxWidth, bannerH, bannerImg });
+    }
+
+    doc.save(`receptbok-${new Date().toISOString().slice(0,10)}.pdf`);
+    btn.textContent = 'Klart ✓';
+    setTimeout(exitBookSelectMode, 700);
+  }catch(e){
+    console.error(e);
+    btn.textContent = 'Kunde inte skapa PDF';
+  }
+  setTimeout(() => { btn.textContent = originalText; btn.disabled = bookSelectedIds.size === 0; }, 2200);
+}
 
 async function fetchViaProxy(proxyUrl){
   const controller = new AbortController();
